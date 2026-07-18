@@ -2,7 +2,7 @@
 
 An unofficial Home Assistant custom integration for the Korean Hyundai and Kia
 developer connected-car APIs. One authenticated brand account can contain one
-or more vehicles, and every vehicle is represented as its own Home Assistant
+or more vehicle subentries, and each vehicle is represented as a Home Assistant
 device.
 
 > This project is not affiliated with Hyundai Motor Company, Kia Corporation,
@@ -11,88 +11,96 @@ device.
 
 ## Features
 
-- Hyundai and Kia accounts using the same shared client implementation.
+- Hyundai and Kia accounts through one shared API implementation.
+- Automatic account titles and post-OAuth vehicle discovery.
 - Multiple accounts and multiple vehicles per account.
-- Native distance-to-empty and odometer sensors.
-- Per-entity enable/disable support through Home Assistant's entity registry.
-- Automatic access-token renewal and rotated refresh-token persistence.
-- Home Assistant reauthentication when a refresh token expires or is revoked.
-- English and Korean configuration UI.
-- Redacted diagnostics.
+- Editable vehicle names with manual car-ID entry only as a discovery fallback.
+- Native distance, EV/PHEV charging, and vehicle-warning entities.
+- Vehicle-type filtering so EV-only entities are not created for GN, HEV, or
+  FCEV vehicles.
+- Per-entity enable/disable support; disabled entities do not activate their API
+  endpoint.
+- Automatic access-token renewal, refresh-token rotation persistence, and
+  Home Assistant reauthentication.
+- English and Korean configuration UI and redacted diagnostics.
 
 ## Requirements
 
 - Home Assistant 2026.7.0 or newer.
-- A Hyundai or Kia Korean developer application with a client ID and client
-  secret.
-- The application's registered redirect URI.
-- The car ID for every vehicle you want to add.
+- A Hyundai or Kia Korean developer application with a client ID, client secret,
+  and registered redirect URI.
 
-The existing `https://example.com/redirect` callback is supported. Because
-Home Assistant cannot read that browser tab automatically, setup asks you to
-paste the complete redirected URL after login. The URL and one-time code are
-used only during the active config flow and are not stored.
+The existing `https://example.com/redirect` callback is supported. The page may
+show an error after login; copy its complete address-bar URL into Home Assistant.
+The URL and one-time code are not stored.
 
 ## Installation
 
 ### HACS custom repository
 
-1. In HACS, add
-   `https://github.com/mahlernim/hyundai-kia-developers-ha` as an Integration
-   custom repository.
-2. Install **Hyundai Kia Developers**.
-3. Restart Home Assistant.
-4. Go to **Settings → Devices & services → Add integration** and search for
+1. Add `https://github.com/mahlernim/hyundai-kia-developers-ha` to HACS as an
+   Integration custom repository.
+2. Install **Hyundai Kia Developers** and restart Home Assistant.
+3. Open **Settings → Devices & services → Add integration** and search for
    **Hyundai Kia Developers**.
 
 ### Manual
 
-Copy `custom_components/hyundai_kia_developers` into your Home Assistant
+Copy `custom_components/hyundai_kia_developers` into the Home Assistant
 `config/custom_components` directory and restart Home Assistant.
 
-## Account setup
+## Setup
 
-1. Select Hyundai or Kia and enter an account label, client ID, client secret,
-   and registered redirect URI.
+1. Select Hyundai or Kia and enter the developer client ID, client secret, and
+   registered redirect URI.
 2. Open the generated authorization link and complete login.
-3. Copy the entire final redirect URL from the browser address bar and paste it
-   into the Home Assistant form.
-4. Add the first vehicle's friendly name and car ID.
+3. Paste the entire final redirected URL into Home Assistant.
+4. Select one vehicle returned by the account and confirm or edit its name.
 
-Use **Add vehicle** on the integration entry to add more cars belonging to the
-same account. A second account, including another account of the same brand,
-is configured as a separate integration entry.
+Account entries are named automatically (`Kia`, `Kia 2`, `Hyundai`, etc.).
+They can be renamed later. Use **Add vehicle** on an account entry to add another
+unconfigured car. If discovery is temporarily unavailable or returns no cars,
+the flow offers retry and manual car-ID entry.
 
-## Sensors
+## Entities
 
-Version 0.1.0 provides:
+Enabled for every vehicle:
 
-- Distance to empty (`km`, measurement)
-- Odometer (`km`, total increasing)
+- Distance to empty
+- Odometer
 
-Sensors can be enabled or disabled individually in Home Assistant. Disabled
-sensors do not cause their metric endpoint to be called during scheduled
-updates.
+Enabled for EV/PHEV vehicles:
 
-The default polling interval is 60 minutes and can be changed from the
-integration's options. The supported range is 30 to 1440 minutes.
+- EV battery level
+- Charging
+- PHEV combined distance to empty when supplied by the API
+
+Available but disabled by default:
+
+- Charging cable connection, charger type, target charge level, and remaining
+  charging time
+- Low fuel, tire pressure, lamp wire, smart-key battery, washer fluid, brake
+  fluid, and engine oil warnings
+
+Enable optional entities from the vehicle's entity list. Related values from one
+API response share one request; for example, all charging entities use one
+charging endpoint. The default polling interval is 60 minutes and can be changed
+from 30 to 1440 minutes.
 
 ## Authentication behavior
 
-Access tokens remain in memory and are renewed shortly before expiration. If
-the provider returns a replacement refresh token, the integration stores it in
-the config entry. Authentication error `4002`, or a vehicle request rejected
-after one forced refresh, starts Home Assistant's reauthentication flow.
+Access tokens remain in memory and are renewed shortly before expiration. Any
+replacement refresh token is saved immediately. Error `4002`, or a vehicle
+request rejected after a forced refresh, starts Home Assistant reauthentication.
 
-If the developer client ID, client secret, or redirect URI changes, use
-**Reconfigure** before reauthorizing.
+Use **Reconfigure** to change the client ID, secret, or redirect URI. Brand is
+immutable; create a separate entry for another brand.
 
 ## Migrating from Pyscript
 
-Configure and validate one brand at a time. Disable the corresponding Pyscript
-app before authorizing this integration so two clients do not compete for a
-rotated refresh token. Keep the old helpers temporarily while dashboard cards
-are changed to the new native sensor entities.
+Disable the corresponding Pyscript before authorizing this integration so two
+clients do not compete for a rotated refresh token. Existing v0.1 vehicle
+subentries and entity IDs remain compatible with v0.2.
 
 ## Development
 

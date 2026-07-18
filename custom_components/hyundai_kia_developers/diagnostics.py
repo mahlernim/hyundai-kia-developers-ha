@@ -12,7 +12,7 @@ from .const import (
     CONF_CAR_ID,
     CONF_REDIRECT_URI,
     CONF_REFRESH_TOKEN,
-    Metric,
+    EntityKey,
 )
 from .models import HyundaiKiaConfigEntry
 
@@ -39,9 +39,9 @@ async def async_get_config_entry_diagnostics(
                 "subentry_type": subentry.subentry_type,
                 "data": async_redact_data(dict(subentry.data), TO_REDACT),
                 "metrics": {
-                    metric.value: {
+                    key.value: {
                         "available": bool(
-                            (result := metric_data.get(metric))
+                            (result := metric_data.get(key))
                             and result.value
                             and not result.error
                         ),
@@ -57,7 +57,7 @@ async def async_get_config_entry_diagnostics(
                         ),
                         "error": result.error if result else None,
                     }
-                    for metric in Metric
+                    for key in EntityKey
                 },
             }
         )

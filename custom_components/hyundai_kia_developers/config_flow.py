@@ -10,14 +10,11 @@ from uuid import uuid4
 
 import voluptuous as vol
 from homeassistant.config_entries import (
-    SOURCE_USER,
     ConfigEntry,
     ConfigFlow,
     ConfigFlowResult,
     ConfigSubentryFlow,
-    FlowType,
     OptionsFlow,
-    SubentryFlowContext,
     SubentryFlowResult,
 )
 from homeassistant.const import CONF_CLIENT_ID, CONF_CLIENT_SECRET
@@ -36,14 +33,15 @@ from homeassistant.helpers.selector import (
 from .api import HyundaiKiaApiClient
 from .const import (
     CONF_ACCOUNT_ID,
-    CONF_ACCOUNT_NAME,
     CONF_BRAND,
     CONF_CAR_ID,
     CONF_CAR_NAME,
+    CONF_CAR_TYPE,
     CONF_REDIRECT_URI,
     CONF_REDIRECT_URL,
     CONF_REFRESH_TOKEN,
     CONF_SCAN_INTERVAL,
+    CONF_VEHICLE,
     DEFAULT_REDIRECT_URI,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
@@ -56,55 +54,60 @@ from .exceptions import (
     HyundaiKiaAuthenticationError,
     HyundaiKiaConnectionError,
     HyundaiKiaError,
+    HyundaiKiaVehicleError,
 )
-from .models import HyundaiKiaConfigEntry, TokenResponse
+from .models import HyundaiKiaConfigEntry, TokenResponse, VehicleProfile
 from .util import parse_authorization_redirect, vehicle_key
 
 
-def _account_schema(
+def _credentials_schema(
     values: Mapping[str, Any] | None = None,
     *,
+    include_brand: bool,
     require_secret: bool = True,
 ) -> vol.Schema:
-    """Return the account configuration schema."""
+    """Return the developer credentials schema."""
     values = values or {}
+    schema: dict[vol.Marker, Any] = {}
+    if include_brand:
+        schema[
+            vol.Required(CONF_BRAND, default=values.get(CONF_BRAND, Brand.HYUNDAI))
+        ] = SelectSelector(
+            SelectSelectorConfig(
+                options=[
+                    SelectOptionDict(value=brand.value, label=brand.value.title())
+                    for brand in Brand
+                ],
+                mode=SelectSelectorMode.DROPDOWN,
+            )
+        )
+    schema[vol.Required(CONF_CLIENT_ID, default=values.get(CONF_CLIENT_ID, ""))] = (
+        TextSelector()
+    )
     secret_key: vol.Marker = (
         vol.Required(CONF_CLIENT_SECRET)
         if require_secret
         else vol.Optional(CONF_CLIENT_SECRET)
     )
-    return vol.Schema(
-        {
-            vol.Required(
-                CONF_BRAND, default=values.get(CONF_BRAND, Brand.HYUNDAI)
-            ): SelectSelector(
-                SelectSelectorConfig(
-                    options=[
-                        SelectOptionDict(value=brand.value, label=brand.value.title())
-                        for brand in Brand
-                    ],
-                    mode=SelectSelectorMode.DROPDOWN,
-                )
-            ),
-            vol.Required(
-                CONF_ACCOUNT_NAME, default=values.get(CONF_ACCOUNT_NAME, "")
-            ): TextSelector(),
-            vol.Required(
-                CONF_CLIENT_ID, default=values.get(CONF_CLIENT_ID, "")
-            ): TextSelector(),
-            secret_key: TextSelector(
-                TextSelectorConfig(type=TextSelectorType.PASSWORD)
-            ),
-            vol.Required(
-                CONF_REDIRECT_URI,
-                default=values.get(CONF_REDIRECT_URI, DEFAULT_REDIRECT_URI),
-            ): TextSelector(TextSelectorConfig(type=TextSelectorType.URL)),
-        }
+    schema[secret_key] = TextSelector(
+        TextSelectorConfig(type=TextSelectorType.PASSWORD)
     )
+    schema[
+        vol.Required(
+            CONF_REDIRECT_URI,
+            default=values.get(CONF_REDIRECT_URI, DEFAULT_REDIRECT_URI),
+        )
+    ] = TextSelector(TextSelectorConfig(type=TextSelectorType.URL))
+    return vol.Schema(schema)
 
 
-def _vehicle_schema(values: Mapping[str, Any] | None = None) -> vol.Schema:
-    """Return the vehicle schema."""
+def _vehicle_name_schema(default: str = "") -> vol.Schema:
+    """Return the editable vehicle-name schema."""
+    return vol.Schema({vol.Required(CONF_CAR_NAME, default=default): TextSelector()})
+
+
+def _manual_vehicle_schema(values: Mapping[str, Any] | None = None) -> vol.Schema:
+    """Return the manual vehicle fallback schema."""
     values = values or {}
     return vol.Schema(
         {
@@ -116,11 +119,20 @@ def _vehicle_schema(values: Mapping[str, Any] | None = None) -> vol.Schema:
     )
 
 
+def _vehicle_label(profile: VehicleProfile) -> str:
+    """Return a useful, disambiguated selector label."""
+    detail = profile.sales_model or profile.model_code or profile.car_type
+    suffix = profile.car_id[-4:]
+    if detail and detail != profile.suggested_name:
+        return f"{profile.suggested_name} — {detail} (••••{suffix})"
+    return f"{profile.suggested_name} (••••{suffix})"
+
+
 class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle account configuration."""
 
     VERSION = 1
-    MINOR_VERSION = 1
+    MINOR_VERSION = 2
 
     def __init__(self) -> None:
         """Initialize flow state."""
@@ -128,6 +140,10 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
         self._oauth_state = ""
         self._flow_mode = "user"
         self._target_entry: HyundaiKiaConfigEntry | None = None
+        self._api: HyundaiKiaApiClient | None = None
+        self._token: TokenResponse | None = None
+        self._vehicles: dict[str, VehicleProfile] = {}
+        self._selected_vehicle: VehicleProfile | None = None
 
     @classmethod
     @callback
@@ -146,20 +162,18 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Collect account and developer application details."""
+        """Collect brand and developer application credentials."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            redirect = urlparse(str(user_input[CONF_REDIRECT_URI]))
-            if redirect.scheme != "https" or not redirect.netloc:
+            if not _valid_redirect_uri(str(user_input[CONF_REDIRECT_URI])):
                 errors[CONF_REDIRECT_URI] = "invalid_redirect_uri"
             else:
                 self._flow_mode = "user"
                 self._pending = dict(user_input)
                 return await self._start_authorization()
-
         return self.async_show_form(
             step_id="user",
-            data_schema=_account_schema(user_input),
+            data_schema=_credentials_schema(user_input, include_brand=True),
             errors=errors,
         )
 
@@ -168,7 +182,7 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Accept and validate the pasted OAuth redirect URL."""
         errors: dict[str, str] = {}
-        api = self._build_api(self._pending)
+        self._api = self._api or self._build_api(self._pending)
         if user_input is not None:
             try:
                 code = parse_authorization_redirect(
@@ -176,31 +190,120 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
                     str(self._pending[CONF_REDIRECT_URI]),
                     self._oauth_state,
                 )
-                token = await api.async_exchange_authorization_code(code)
-                if not token.refresh_token:
+                self._token = await self._api.async_exchange_authorization_code(code)
+                if not self._token.refresh_token:
                     raise HyundaiKiaAuthenticationError(
                         "Authorization response had no refresh token"
                     )
-                return await self._finish_authorization(api, token)
+                if self._flow_mode == "user":
+                    return await self.async_step_vehicle()
+                return await self._finish_existing_authorization()
             except HyundaiKiaAuthenticationError:
                 errors["base"] = "invalid_auth"
             except HyundaiKiaConnectionError:
                 errors["base"] = "cannot_connect"
+        return self._show_authorize_form(errors)
 
-        return self.async_show_form(
-            step_id="authorize",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_REDIRECT_URL): TextSelector(
-                        TextSelectorConfig(type=TextSelectorType.URL)
+    async def async_step_vehicle(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Discover and select the first vehicle."""
+        if user_input is not None:
+            selected = self._vehicles.get(str(user_input[CONF_VEHICLE]))
+            if selected is None:
+                return await self._load_vehicle_choices()
+            self._selected_vehicle = selected
+            return await self.async_step_vehicle_name()
+        return await self._load_vehicle_choices()
+
+    async def async_step_vehicle_name(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Collect an editable name for the selected vehicle."""
+        assert self._selected_vehicle and self._api
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            name = str(user_input[CONF_CAR_NAME]).strip()
+            if not name:
+                errors[CONF_CAR_NAME] = "required"
+            else:
+                try:
+                    await self._api.async_validate_vehicle(
+                        self._selected_vehicle.car_id
                     )
-                }
-            ),
+                except HyundaiKiaAuthenticationError:
+                    errors["base"] = "invalid_auth"
+                except HyundaiKiaConnectionError:
+                    errors["base"] = "cannot_connect"
+                except HyundaiKiaError:
+                    errors["base"] = "invalid_vehicle"
+                else:
+                    return await self._create_account_entry(
+                        name, self._selected_vehicle
+                    )
+        return self.async_show_form(
+            step_id="vehicle_name",
+            data_schema=_vehicle_name_schema(self._selected_vehicle.suggested_name),
             errors=errors,
             description_placeholders={
-                "authorization_url": api.authorization_url(self._oauth_state),
-                "brand": Brand(str(self._pending[CONF_BRAND])).value.title(),
+                "vehicle": _vehicle_label(self._selected_vehicle)
             },
+        )
+
+    async def async_step_retry(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Retry vehicle discovery using the active token."""
+        self._vehicles = {}
+        return await self.async_step_vehicle()
+
+    async def async_step_vehicle_discovery_failed(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Offer recovery after vehicle discovery fails."""
+        return self.async_show_menu(
+            step_id="vehicle_discovery_failed",
+            menu_options=["retry", "manual"],
+        )
+
+    async def async_step_no_vehicles(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Offer recovery when discovery returns no vehicles."""
+        return self.async_show_menu(
+            step_id="no_vehicles",
+            menu_options=["retry", "manual"],
+        )
+
+    async def async_step_manual(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manually add the first vehicle after discovery failure."""
+        assert self._api
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            car_id = str(user_input[CONF_CAR_ID]).strip()
+            name = str(user_input[CONF_CAR_NAME]).strip()
+            if car_id and _vehicle_configured(self.hass, self._vehicle_key(car_id)):
+                return self.async_abort(reason="already_configured")
+            if not name or not car_id:
+                errors["base"] = "required"
+            else:
+                try:
+                    await self._api.async_validate_vehicle(car_id)
+                except HyundaiKiaAuthenticationError:
+                    errors["base"] = "invalid_auth"
+                except HyundaiKiaConnectionError:
+                    errors["base"] = "cannot_connect"
+                except HyundaiKiaError:
+                    errors["base"] = "invalid_vehicle"
+                else:
+                    profile = VehicleProfile(car_id, "", "", "", "")
+                    return await self._create_account_entry(name, profile)
+        return self.async_show_form(
+            step_id="manual",
+            data_schema=_manual_vehicle_schema(user_input),
+            errors=errors,
         )
 
     async def async_step_reauth(
@@ -209,10 +312,7 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
         """Begin account reauthentication."""
         self._target_entry = self._get_reauth_entry()
         self._flow_mode = "reauth"
-        self._pending = {
-            **dict(entry_data),
-            CONF_ACCOUNT_NAME: self._target_entry.title,
-        }
+        self._pending = dict(entry_data)
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
@@ -228,94 +328,178 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Update developer application credentials and reauthorize."""
+        """Update developer credentials without changing the brand."""
         entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
-        current = {
-            **dict(entry.data),
-            CONF_ACCOUNT_NAME: entry.title,
-        }
         if user_input is not None:
-            redirect = urlparse(str(user_input[CONF_REDIRECT_URI]))
-            if redirect.scheme != "https" or not redirect.netloc:
+            if not _valid_redirect_uri(str(user_input[CONF_REDIRECT_URI])):
                 errors[CONF_REDIRECT_URI] = "invalid_redirect_uri"
             else:
                 self._target_entry = entry
                 self._flow_mode = "reconfigure"
                 self._pending = {
+                    **dict(entry.data),
                     **dict(user_input),
                     CONF_CLIENT_SECRET: (
                         str(user_input.get(CONF_CLIENT_SECRET, ""))
                         or str(entry.data[CONF_CLIENT_SECRET])
                     ),
-                    CONF_ACCOUNT_ID: entry.data[CONF_ACCOUNT_ID],
                 }
                 return await self._start_authorization()
-
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=_account_schema(current, require_secret=False),
+            data_schema=_credentials_schema(
+                entry.data,
+                include_brand=False,
+                require_secret=False,
+            ),
             errors=errors,
         )
 
-    async def async_on_create_entry(self, result: ConfigFlowResult) -> ConfigFlowResult:
-        """Start the initial vehicle subentry flow after account creation."""
-        subentry_result = await self.hass.config_entries.subentries.async_init(
-            (result["result"].entry_id, SUBENTRY_TYPE_VEHICLE),
-            context=SubentryFlowContext(source=SOURCE_USER),
+    async def async_step_validation_retry(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Retry account validation after a temporary connection failure."""
+        if user_input is not None:
+            return await self._finish_existing_authorization()
+        return self.async_show_form(
+            step_id="validation_retry", data_schema=vol.Schema({})
         )
-        result["next_flow"] = (
-            FlowType.CONFIG_SUBENTRIES_FLOW,
-            subentry_result["flow_id"],
-        )
-        return result
 
     async def _start_authorization(self) -> ConfigFlowResult:
-        """Create a fresh OAuth state and show the authorization step."""
+        """Create fresh OAuth state and show the authorization step."""
         self._oauth_state = secrets.token_urlsafe(32)
+        self._api = self._build_api(self._pending)
         return await self.async_step_authorize()
 
-    async def _finish_authorization(
-        self, api: HyundaiKiaApiClient, token: TokenResponse
-    ) -> ConfigFlowResult:
-        """Create or update an account after successful authorization."""
-        assert token.refresh_token
-        updates = {
-            CONF_BRAND: str(self._pending[CONF_BRAND]),
-            CONF_CLIENT_ID: str(self._pending[CONF_CLIENT_ID]),
-            CONF_CLIENT_SECRET: str(self._pending[CONF_CLIENT_SECRET]),
-            CONF_REDIRECT_URI: str(self._pending[CONF_REDIRECT_URI]),
-            CONF_REFRESH_TOKEN: token.refresh_token,
-        }
-
-        if self._flow_mode in ("reauth", "reconfigure"):
-            assert self._target_entry
-            if self._target_entry.subentries:
-                first_vehicle = next(iter(self._target_entry.subentries.values()))
-                try:
-                    await api.async_validate_vehicle(
-                        str(first_vehicle.data[CONF_CAR_ID])
+    def _show_authorize_form(self, errors: dict[str, str]) -> ConfigFlowResult:
+        """Show the manual OAuth redirect-paste form."""
+        assert self._api
+        return self.async_show_form(
+            step_id="authorize",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_REDIRECT_URL): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.URL)
                     )
-                except HyundaiKiaAuthenticationError:
-                    return self.async_abort(reason="wrong_account")
-                except HyundaiKiaConnectionError:
-                    return self.async_abort(reason="cannot_connect")
-                except HyundaiKiaError:
-                    return self.async_abort(reason="wrong_account")
-            return self.async_update_reload_and_abort(
-                self._target_entry,
-                title=str(self._pending[CONF_ACCOUNT_NAME]),
-                data_updates=updates,
-            )
-
-        account_id = uuid4().hex
-        updates[CONF_ACCOUNT_ID] = account_id
-        await self.async_set_unique_id(f"{updates[CONF_BRAND]}:{account_id}")
-        return self.async_create_entry(
-            title=str(self._pending[CONF_ACCOUNT_NAME]),
-            data=updates,
-            options={CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL},
+                }
+            ),
+            errors=errors,
+            description_placeholders={
+                "authorization_url": self._api.authorization_url(self._oauth_state),
+                "brand": Brand(str(self._pending[CONF_BRAND])).value.title(),
+            },
         )
+
+    async def _load_vehicle_choices(self) -> ConfigFlowResult:
+        """Load and display unconfigured vehicles for initial setup."""
+        assert self._api
+        try:
+            discovered = await self._api.async_get_vehicles()
+        except HyundaiKiaAuthenticationError:
+            self._oauth_state = secrets.token_urlsafe(32)
+            return self._show_authorize_form({"base": "invalid_auth"})
+        except (HyundaiKiaConnectionError, HyundaiKiaVehicleError):
+            return await self.async_step_vehicle_discovery_failed()
+
+        self._vehicles = {
+            profile.car_id: profile
+            for profile in discovered
+            if not _vehicle_configured(self.hass, self._vehicle_key(profile.car_id))
+        }
+        if discovered and not self._vehicles:
+            return self.async_abort(reason="all_vehicles_configured")
+        if not self._vehicles:
+            return await self.async_step_no_vehicles()
+        return self.async_show_form(
+            step_id="vehicle",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_VEHICLE): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                SelectOptionDict(
+                                    value=profile.car_id,
+                                    label=_vehicle_label(profile),
+                                )
+                                for profile in self._vehicles.values()
+                            ],
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def _finish_existing_authorization(self) -> ConfigFlowResult:
+        """Validate and update a reauthenticated or reconfigured entry."""
+        assert self._api and self._token and self._target_entry
+        try:
+            vehicles = await self._api.async_get_vehicles()
+        except HyundaiKiaAuthenticationError:
+            self._oauth_state = secrets.token_urlsafe(32)
+            return self._show_authorize_form({"base": "invalid_auth"})
+        except (HyundaiKiaConnectionError, HyundaiKiaVehicleError):
+            return await self.async_step_validation_retry()
+
+        configured_ids = {
+            str(subentry.data[CONF_CAR_ID])
+            for subentry in self._target_entry.subentries.values()
+            if subentry.subentry_type == SUBENTRY_TYPE_VEHICLE
+        }
+        discovered_ids = {profile.car_id for profile in vehicles}
+        if configured_ids and configured_ids.isdisjoint(discovered_ids):
+            return self.async_abort(reason="wrong_account")
+
+        refresh_token = self._api.refresh_token or self._token.refresh_token
+        assert refresh_token
+        return self.async_update_reload_and_abort(
+            self._target_entry,
+            data_updates={
+                CONF_CLIENT_ID: str(self._pending[CONF_CLIENT_ID]),
+                CONF_CLIENT_SECRET: str(self._pending[CONF_CLIENT_SECRET]),
+                CONF_REDIRECT_URI: str(self._pending[CONF_REDIRECT_URI]),
+                CONF_REFRESH_TOKEN: refresh_token,
+            },
+        )
+
+    async def _create_account_entry(
+        self, vehicle_name: str, profile: VehicleProfile
+    ) -> ConfigFlowResult:
+        """Create the account and its first vehicle atomically."""
+        assert self._api and self._token
+        refresh_token = self._api.refresh_token or self._token.refresh_token
+        assert refresh_token
+        brand = Brand(str(self._pending[CONF_BRAND]))
+        account_id = uuid4().hex
+        await self.async_set_unique_id(f"{brand.value}:{account_id}")
+        car_data: dict[str, str] = {CONF_CAR_ID: profile.car_id}
+        if profile.car_type:
+            car_data[CONF_CAR_TYPE] = profile.car_type
+        return self.async_create_entry(
+            title=_next_account_title(self.hass, brand),
+            data={
+                CONF_ACCOUNT_ID: account_id,
+                CONF_BRAND: brand.value,
+                CONF_CLIENT_ID: str(self._pending[CONF_CLIENT_ID]),
+                CONF_CLIENT_SECRET: str(self._pending[CONF_CLIENT_SECRET]),
+                CONF_REDIRECT_URI: str(self._pending[CONF_REDIRECT_URI]),
+                CONF_REFRESH_TOKEN: refresh_token,
+            },
+            options={CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL},
+            subentries=[
+                {
+                    "subentry_type": SUBENTRY_TYPE_VEHICLE,
+                    "title": vehicle_name,
+                    "data": car_data,
+                    "unique_id": self._vehicle_key(profile.car_id),
+                }
+            ],
+        )
+
+    def _vehicle_key(self, car_id: str) -> str:
+        """Return a privacy-preserving vehicle key for this pending brand."""
+        return vehicle_key(str(self._pending[CONF_BRAND]), car_id)
 
     def _build_api(self, data: Mapping[str, Any]) -> HyundaiKiaApiClient:
         """Build an API client for config-flow validation."""
@@ -330,91 +514,195 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class VehicleSubentryFlowHandler(ConfigSubentryFlow):
-    """Add and reconfigure vehicles under an authenticated account."""
+    """Discover, add, and rename vehicles under an account."""
+
+    def __init__(self) -> None:
+        """Initialize vehicle-flow state."""
+        self._api: HyundaiKiaApiClient | None = None
+        self._vehicles: dict[str, VehicleProfile] = {}
+        self._selected_vehicle: VehicleProfile | None = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
-        """Add a vehicle."""
+        """Start vehicle discovery."""
+        return await self.async_step_vehicle(user_input)
+
+    async def async_step_vehicle(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Discover and select a vehicle."""
+        if user_input is not None:
+            selected = self._vehicles.get(str(user_input[CONF_VEHICLE]))
+            if selected is not None:
+                self._selected_vehicle = selected
+                return await self.async_step_vehicle_name()
+
+        entry = self._get_entry()
+        self._api = self._api or self._build_api(entry)
+        try:
+            discovered = await self._api.async_get_vehicles()
+        except HyundaiKiaAuthenticationError:
+            entry.async_start_reauth_if_available(self.hass)
+            return self.async_abort(reason="reauth_required")
+        except (HyundaiKiaConnectionError, HyundaiKiaVehicleError):
+            return await self.async_step_vehicle_discovery_failed()
+
+        self._vehicles = {
+            profile.car_id: profile
+            for profile in discovered
+            if not _vehicle_configured(
+                self.hass, vehicle_key(str(entry.data[CONF_BRAND]), profile.car_id)
+            )
+        }
+        if discovered and not self._vehicles:
+            return self.async_abort(reason="all_vehicles_configured")
+        if not self._vehicles:
+            return await self.async_step_no_vehicles()
+        return self.async_show_form(
+            step_id="vehicle",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_VEHICLE): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                SelectOptionDict(
+                                    value=profile.car_id,
+                                    label=_vehicle_label(profile),
+                                )
+                                for profile in self._vehicles.values()
+                            ]
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_vehicle_name(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Collect the selected vehicle's friendly name."""
+        assert self._selected_vehicle and self._api
         errors: dict[str, str] = {}
         if user_input is not None:
-            entry = self._get_entry()
-            car_id = str(user_input[CONF_CAR_ID]).strip()
-            key = vehicle_key(str(entry.data[CONF_BRAND]), car_id)
-            if self._vehicle_configured(key):
-                return self.async_abort(reason="already_configured")
-            try:
-                await self._validate_vehicle(entry, car_id)
-            except HyundaiKiaAuthenticationError:
-                errors["base"] = "invalid_auth"
-            except HyundaiKiaConnectionError:
-                errors["base"] = "cannot_connect"
-            except HyundaiKiaError:
-                errors["base"] = "invalid_vehicle"
+            name = str(user_input[CONF_CAR_NAME]).strip()
+            if not name:
+                errors[CONF_CAR_NAME] = "required"
             else:
-                return self.async_create_entry(
-                    title=str(user_input[CONF_CAR_NAME]),
-                    data={CONF_CAR_ID: car_id},
-                    unique_id=key,
-                )
-
+                try:
+                    await self._api.async_validate_vehicle(
+                        self._selected_vehicle.car_id
+                    )
+                except HyundaiKiaAuthenticationError:
+                    self._get_entry().async_start_reauth_if_available(self.hass)
+                    return self.async_abort(reason="reauth_required")
+                except HyundaiKiaConnectionError:
+                    errors["base"] = "cannot_connect"
+                except HyundaiKiaError:
+                    errors["base"] = "invalid_vehicle"
+                else:
+                    data = {CONF_CAR_ID: self._selected_vehicle.car_id}
+                    if self._selected_vehicle.car_type:
+                        data[CONF_CAR_TYPE] = self._selected_vehicle.car_type
+                    return self.async_create_entry(
+                        title=name,
+                        data=data,
+                        unique_id=self._vehicle_unique_id(
+                            self._selected_vehicle.car_id
+                        ),
+                    )
         return self.async_show_form(
-            step_id="user",
-            data_schema=_vehicle_schema(user_input),
+            step_id="vehicle_name",
+            data_schema=_vehicle_name_schema(self._selected_vehicle.suggested_name),
+            errors=errors,
+            description_placeholders={
+                "vehicle": _vehicle_label(self._selected_vehicle)
+            },
+        )
+
+    async def async_step_retry(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Retry vehicle discovery."""
+        self._vehicles = {}
+        return await self.async_step_vehicle()
+
+    async def async_step_vehicle_discovery_failed(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Offer recovery after vehicle discovery fails."""
+        return self.async_show_menu(
+            step_id="vehicle_discovery_failed",
+            menu_options=["retry", "manual"],
+        )
+
+    async def async_step_no_vehicles(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Offer recovery when discovery returns no vehicles."""
+        return self.async_show_menu(
+            step_id="no_vehicles",
+            menu_options=["retry", "manual"],
+        )
+
+    async def async_step_manual(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Manually add a vehicle after discovery failure."""
+        entry = self._get_entry()
+        self._api = self._api or self._build_api(entry)
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            car_id = str(user_input[CONF_CAR_ID]).strip()
+            name = str(user_input[CONF_CAR_NAME]).strip()
+            unique_id = self._vehicle_unique_id(car_id)
+            if _vehicle_configured(self.hass, unique_id):
+                return self.async_abort(reason="already_configured")
+            if not name or not car_id:
+                errors["base"] = "required"
+            else:
+                try:
+                    await self._api.async_validate_vehicle(car_id)
+                except HyundaiKiaAuthenticationError:
+                    entry.async_start_reauth_if_available(self.hass)
+                    return self.async_abort(reason="reauth_required")
+                except HyundaiKiaConnectionError:
+                    errors["base"] = "cannot_connect"
+                except HyundaiKiaError:
+                    errors["base"] = "invalid_vehicle"
+                else:
+                    return self.async_create_entry(
+                        title=name,
+                        data={CONF_CAR_ID: car_id},
+                        unique_id=unique_id,
+                    )
+        return self.async_show_form(
+            step_id="manual",
+            data_schema=_manual_vehicle_schema(user_input),
             errors=errors,
         )
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
-        """Rename a vehicle or replace its car ID."""
+        """Rename a vehicle without changing its identity."""
         entry = self._get_entry()
         subentry = self._get_reconfigure_subentry()
         errors: dict[str, str] = {}
-        current = {
-            CONF_CAR_NAME: subentry.title,
-            CONF_CAR_ID: subentry.data[CONF_CAR_ID],
-        }
         if user_input is not None:
-            car_id = str(user_input[CONF_CAR_ID]).strip()
-            key = vehicle_key(str(entry.data[CONF_BRAND]), car_id)
-            if key != subentry.unique_id and self._vehicle_configured(key):
-                return self.async_abort(reason="already_configured")
-            try:
-                await self._validate_vehicle(entry, car_id)
-            except HyundaiKiaAuthenticationError:
-                errors["base"] = "invalid_auth"
-            except HyundaiKiaConnectionError:
-                errors["base"] = "cannot_connect"
-            except HyundaiKiaError:
-                errors["base"] = "invalid_vehicle"
+            name = str(user_input[CONF_CAR_NAME]).strip()
+            if not name:
+                errors[CONF_CAR_NAME] = "required"
             else:
-                return self.async_update_and_abort(
-                    entry,
-                    subentry,
-                    title=str(user_input[CONF_CAR_NAME]),
-                    data={CONF_CAR_ID: car_id},
-                    unique_id=key,
-                )
-
+                return self.async_update_and_abort(entry, subentry, title=name)
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=_vehicle_schema(user_input or current),
+            data_schema=_vehicle_name_schema(subentry.title),
             errors=errors,
         )
 
-    def _vehicle_configured(self, key: str) -> bool:
-        """Return whether this hashed car ID exists in any account."""
-        return any(
-            subentry.unique_id == key
-            for entry in self.hass.config_entries.async_entries(DOMAIN)
-            for subentry in entry.subentries.values()
-        )
-
-    async def _validate_vehicle(
-        self, entry: HyundaiKiaConfigEntry, car_id: str
-    ) -> None:
-        """Validate a car and persist token rotation during validation."""
+    def _build_api(self, entry: HyundaiKiaConfigEntry) -> HyundaiKiaApiClient:
+        """Build an API client that persists rotated refresh tokens."""
 
         def persist_refresh_token(refresh_token: str) -> None:
             if refresh_token != entry.data[CONF_REFRESH_TOKEN]:
@@ -423,7 +711,7 @@ class VehicleSubentryFlowHandler(ConfigSubentryFlow):
                     data={**entry.data, CONF_REFRESH_TOKEN: refresh_token},
                 )
 
-        api = HyundaiKiaApiClient(
+        return HyundaiKiaApiClient(
             async_get_clientsession(self.hass),
             Brand(str(entry.data[CONF_BRAND])),
             str(entry.data[CONF_CLIENT_ID]),
@@ -432,7 +720,11 @@ class VehicleSubentryFlowHandler(ConfigSubentryFlow):
             str(entry.data[CONF_REFRESH_TOKEN]),
             persist_refresh_token,
         )
-        await api.async_validate_vehicle(car_id)
+
+    def _vehicle_unique_id(self, car_id: str) -> str:
+        """Return the selected vehicle's privacy-preserving unique ID."""
+        entry = self._get_entry()
+        return vehicle_key(str(entry.data[CONF_BRAND]), car_id)
 
 
 class HyundaiKiaOptionsFlow(OptionsFlow):
@@ -460,3 +752,27 @@ class HyundaiKiaOptionsFlow(OptionsFlow):
                 }
             ),
         )
+
+
+def _valid_redirect_uri(value: str) -> bool:
+    """Return whether the registered redirect URI is valid for this flow."""
+    redirect = urlparse(value)
+    return redirect.scheme == "https" and bool(redirect.netloc)
+
+
+def _vehicle_configured(hass: Any, unique_id: str) -> bool:
+    """Return whether a vehicle exists in any configured account."""
+    return any(
+        subentry.unique_id == unique_id
+        for entry in hass.config_entries.async_entries(DOMAIN)
+        for subentry in entry.subentries.values()
+    )
+
+
+def _next_account_title(hass: Any, brand: Brand) -> str:
+    """Generate a simple brand title with a same-brand suffix."""
+    count = sum(
+        entry.data.get(CONF_BRAND) == brand.value
+        for entry in hass.config_entries.async_entries(DOMAIN)
+    )
+    return brand.value.title() if count == 0 else f"{brand.value.title()} {count + 1}"

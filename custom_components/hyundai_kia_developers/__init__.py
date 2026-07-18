@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_CLIENT_ID, CONF_CLIENT_SECRET
 from homeassistant.core import HomeAssistant
@@ -12,6 +14,8 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import HyundaiKiaApiClient
 from .const import (
     CONF_BRAND,
+    CONF_CAR_ID,
+    CONF_CAR_TYPE,
     CONF_REDIRECT_URI,
     CONF_REFRESH_TOKEN,
     CONF_SCAN_INTERVAL,
@@ -21,10 +25,16 @@ from .const import (
     Brand,
 )
 from .coordinator import HyundaiKiaDataUpdateCoordinator, subentry_snapshot
-from .exceptions import HyundaiKiaAuthenticationError, HyundaiKiaConnectionError
+from .exceptions import (
+    HyundaiKiaAuthenticationError,
+    HyundaiKiaConnectionError,
+    HyundaiKiaError,
+)
 from .models import HyundaiKiaConfigEntry, HyundaiKiaRuntimeData
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: HyundaiKiaConfigEntry) -> bool:
@@ -48,7 +58,33 @@ async def async_setup_entry(hass: HomeAssistant, entry: HyundaiKiaConfigEntry) -
         str(entry.data[CONF_REFRESH_TOKEN]),
         persist_refresh_token,
     )
-    coordinator = HyundaiKiaDataUpdateCoordinator(hass, entry, api)
+    vehicle_profiles = {}
+    try:
+        vehicle_profiles = {
+            profile.car_id: profile for profile in await api.async_get_vehicles()
+        }
+    except HyundaiKiaAuthenticationError as err:
+        raise ConfigEntryAuthFailed(
+            translation_domain=DOMAIN,
+            translation_key="invalid_auth",
+        ) from err
+    except HyundaiKiaError as err:
+        _LOGGER.warning(
+            "Vehicle profile discovery was unavailable; using stored vehicle data: %s",
+            err,
+        )
+
+    for subentry in entry.subentries.values():
+        car_id = str(subentry.data.get(CONF_CAR_ID, ""))
+        profile = vehicle_profiles.get(car_id)
+        if profile and profile.car_type != subentry.data.get(CONF_CAR_TYPE):
+            hass.config_entries.async_update_subentry(
+                entry,
+                subentry,
+                data={**subentry.data, CONF_CAR_TYPE: profile.car_type},
+            )
+
+    coordinator = HyundaiKiaDataUpdateCoordinator(hass, entry, api, vehicle_profiles)
     try:
         await coordinator.async_config_entry_first_refresh()
     except ConfigEntryAuthFailed:
@@ -67,6 +103,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HyundaiKiaConfigEntry) -
     entry.runtime_data = HyundaiKiaRuntimeData(
         api=api,
         coordinator=coordinator,
+        vehicle_profiles=vehicle_profiles,
         subentry_snapshot=subentry_snapshot(entry),
     )
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

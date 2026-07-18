@@ -1,14 +1,12 @@
 {
   "title": "Hyundai Kia Developers",
   "config": {
-    "flow_title": "{name}",
     "step": {
       "user": {
         "title": "Connect a developer account",
-        "description": "Enter the developer application credentials registered for this Hyundai or Kia account.",
+        "description": "Select a brand and enter the developer application credentials. The account entry will be named automatically.",
         "data": {
           "brand": "Brand",
-          "account_name": "Account name",
           "client_id": "Client ID",
           "client_secret": "Client secret",
           "redirect_uri": "Registered redirect URI"
@@ -16,9 +14,47 @@
       },
       "authorize": {
         "title": "Authorize {brand}",
-        "description": "Open the [authorization page]({authorization_url}), complete login, then paste the entire redirected URL below. The pasted URL and one-time code are not stored.",
+        "description": "Open the [authorization page]({authorization_url}), complete login, then paste the entire redirected URL. An error page at example.com is expected; copy its address-bar URL. Codes are single-use and are not stored.",
         "data": {
           "redirect_url": "Redirected URL"
+        }
+      },
+      "vehicle": {
+        "title": "Select a vehicle",
+        "description": "Choose one vehicle authorized for this account.",
+        "data": {
+          "vehicle": "Vehicle"
+        }
+      },
+      "vehicle_name": {
+        "title": "Name the vehicle",
+        "description": "Choose a Home Assistant name for {vehicle}.",
+        "data": {
+          "car_name": "Vehicle name"
+        }
+      },
+      "vehicle_discovery_failed": {
+        "title": "Vehicle discovery unavailable",
+        "description": "The account was authorized, but its vehicle list could not be loaded. Retry or enter a car ID manually.",
+        "menu_options": {
+          "retry": "Retry discovery",
+          "manual": "Enter car ID manually"
+        }
+      },
+      "no_vehicles": {
+        "title": "No vehicles returned",
+        "description": "The account returned no authorized vehicles. Retry or use manual entry if you know the car ID.",
+        "menu_options": {
+          "retry": "Retry discovery",
+          "manual": "Enter car ID manually"
+        }
+      },
+      "manual": {
+        "title": "Enter vehicle manually",
+        "description": "Use this fallback only when automatic vehicle discovery is unavailable.",
+        "data": {
+          "car_name": "Vehicle name",
+          "car_id": "Car ID"
         }
       },
       "reauth_confirm": {
@@ -27,32 +63,37 @@
       },
       "reconfigure": {
         "title": "Update developer credentials",
-        "description": "Change the account or developer application details, then authorize the account again. Leave Client secret empty to keep the saved value.",
+        "description": "Update the developer application credentials for this existing brand. Leave Client secret empty to retain it.",
         "data": {
-          "brand": "Brand",
-          "account_name": "Account name",
           "client_id": "Client ID",
           "client_secret": "New client secret",
           "redirect_uri": "Registered redirect URI"
         }
+      },
+      "validation_retry": {
+        "title": "Retry account validation",
+        "description": "Authorization succeeded, but the vehicle list could not be checked. Continue to retry without repeating login."
       }
     },
     "error": {
       "cannot_connect": "Unable to connect to the vehicle API.",
-      "invalid_auth": "Authorization failed. Check the pasted URL and developer credentials.",
-      "invalid_redirect_uri": "Enter a valid HTTPS redirect URI."
+      "invalid_auth": "Authorization failed. Start again and paste a newly redirected URL.",
+      "invalid_redirect_uri": "Enter a valid HTTPS redirect URI.",
+      "invalid_vehicle": "The account could not read the required vehicle data.",
+      "required": "This field is required."
     },
     "abort": {
-      "already_configured": "This account or vehicle is already configured.",
+      "already_configured": "This vehicle is already configured.",
+      "all_vehicles_configured": "Every vehicle returned by this account is already configured.",
       "cannot_connect": "Unable to connect to the vehicle API.",
-      "wrong_account": "The authorized account cannot access the existing vehicle."
+      "wrong_account": "The authorized account cannot access any existing vehicle."
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Polling options",
-        "description": "Choose how often enabled vehicle sensors are refreshed.",
+        "description": "Choose how often enabled vehicle entities are refreshed.",
         "data": {
           "scan_interval": "Polling interval (minutes)"
         }
@@ -66,41 +107,93 @@
         "user": "Add vehicle"
       },
       "step": {
-        "user": {
-          "title": "Add a vehicle",
-          "description": "Enter a friendly name and the car ID available to this authenticated account.",
+        "vehicle": {
+          "title": "Select a vehicle",
+          "description": "Choose an unconfigured vehicle from this account.",
+          "data": {
+            "vehicle": "Vehicle"
+          }
+        },
+        "vehicle_name": {
+          "title": "Name the vehicle",
+          "description": "Choose a Home Assistant name for {vehicle}.",
+          "data": {
+            "car_name": "Vehicle name"
+          }
+        },
+        "vehicle_discovery_failed": {
+          "title": "Vehicle discovery unavailable",
+          "description": "The vehicle list could not be loaded. Retry or enter a car ID manually.",
+          "menu_options": {
+            "retry": "Retry discovery",
+            "manual": "Enter car ID manually"
+          }
+        },
+        "no_vehicles": {
+          "title": "No vehicles returned",
+          "description": "This account returned no vehicles. Retry or use manual entry.",
+          "menu_options": {
+            "retry": "Retry discovery",
+            "manual": "Enter car ID manually"
+          }
+        },
+        "manual": {
+          "title": "Enter vehicle manually",
+          "description": "Use this fallback only when automatic discovery is unavailable.",
           "data": {
             "car_name": "Vehicle name",
             "car_id": "Car ID"
           }
         },
         "reconfigure": {
-          "title": "Update vehicle",
-          "description": "Rename the vehicle or replace its car ID.",
+          "title": "Rename vehicle",
+          "description": "Renaming preserves its device and entity identities. Remove and add the vehicle to replace it.",
           "data": {
-            "car_name": "Vehicle name",
-            "car_id": "Car ID"
+            "car_name": "Vehicle name"
           }
         }
       },
       "error": {
         "cannot_connect": "Unable to connect to the vehicle API.",
         "invalid_auth": "The account needs to be reauthenticated.",
-        "invalid_vehicle": "The account could not read both required metrics for this car ID."
+        "invalid_vehicle": "The account could not read the required data for this car ID.",
+        "required": "This field is required."
       },
       "abort": {
-        "already_configured": "This vehicle is already configured."
+        "already_configured": "This vehicle is already configured.",
+        "all_vehicles_configured": "Every vehicle returned by this account is already configured.",
+        "reauth_required": "Reauthentication was started for this account."
       }
     }
   },
   "entity": {
     "sensor": {
-      "distance_to_empty": {
-        "name": "Distance to empty"
+      "distance_to_empty": { "name": "Distance to empty" },
+      "odometer": { "name": "Odometer" },
+      "combined_distance_to_empty": { "name": "Combined distance to empty" },
+      "ev_battery_level": { "name": "EV battery level" },
+      "charger_type": {
+        "name": "Charger type",
+        "state": {
+          "not_connected": "Not connected",
+          "fast": "Fast",
+          "normal": "Normal",
+          "unknown": "Unknown"
+        }
       },
-      "odometer": {
-        "name": "Odometer"
-      }
+      "target_state_of_charge": { "name": "Target state of charge" },
+      "remaining_charging_time": { "name": "Remaining charging time" }
+    },
+    "binary_sensor": {
+      "charging": { "name": "Charging" },
+      "charging_cable_connected": { "name": "Charging cable connected" },
+      "low_fuel_warning": { "name": "Low fuel warning" },
+      "tire_pressure_warning": { "name": "Tire pressure warning" },
+      "lamp_wire_warning": { "name": "Lamp wire warning" },
+      "smart_key_battery_warning": { "name": "Smart key battery warning" },
+      "washer_fluid_warning": { "name": "Washer fluid warning" },
+      "brake_fluid_warning": { "name": "Brake fluid warning" },
+      "engine_oil_warning": { "name": "Engine oil warning" }
     }
   },
   "exceptions": {
@@ -111,7 +204,7 @@
       "message": "The Hyundai/Kia developer account needs to be reauthenticated."
     },
     "update_failed": {
-      "message": "Unable to update any configured vehicle metric."
+      "message": "Unable to update any enabled vehicle endpoint."
     }
   }
 }

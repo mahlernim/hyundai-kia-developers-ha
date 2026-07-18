@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntry
 
-from .const import Metric
+from .const import EntityKey
 
 if TYPE_CHECKING:
     from .api import HyundaiKiaApiClient
@@ -23,19 +23,38 @@ class TokenResponse:
 
 
 @dataclass(frozen=True, slots=True)
-class MetricValue:
-    """One metric value returned by the vehicle API."""
+class VehicleProfile:
+    """One vehicle returned by the account profile endpoint."""
 
-    value: float
+    car_id: str
+    nickname: str
+    car_type: str
+    model_code: str
+    sales_model: str
+
+    @property
+    def suggested_name(self) -> str:
+        """Return the best user-facing vehicle name available."""
+        return self.nickname or self.sales_model or self.model_code or "Vehicle"
+
+
+type VehicleStateValue = float | bool | str
+
+
+@dataclass(frozen=True, slots=True)
+class EntityValue:
+    """One entity value returned by a vehicle endpoint."""
+
+    value: VehicleStateValue
     timestamp: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
-class MetricResult:
-    """One coordinator metric result."""
+class EntityResult:
+    """One coordinator entity result."""
 
-    metric: Metric
-    value: MetricValue | None
+    key: EntityKey
+    value: EntityValue | None
     error: str | None = None
 
 
@@ -45,6 +64,7 @@ class HyundaiKiaRuntimeData:
 
     api: "HyundaiKiaApiClient"
     coordinator: "HyundaiKiaDataUpdateCoordinator"
+    vehicle_profiles: dict[str, VehicleProfile]
     subentry_snapshot: tuple[tuple[str, str, str], ...]
 
 

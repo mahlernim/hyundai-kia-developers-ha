@@ -16,7 +16,8 @@ from .const import (
     REQUEST_TIMEOUT_SECONDS,
     TOKEN_REFRESH_MARGIN_SECONDS,
     Brand,
-    Metric,
+    EndpointKey,
+    EntityKey,
 )
 from .exceptions import (
     HyundaiKiaAuthenticationError,
@@ -24,9 +25,54 @@ from .exceptions import (
     HyundaiKiaRateLimitError,
     HyundaiKiaVehicleError,
 )
-from .models import MetricValue, TokenResponse
+from .models import EntityValue, TokenResponse, VehicleProfile
 
 RefreshTokenCallback = Callable[[str], None]
+
+ENDPOINT_PATHS: dict[EndpointKey, str] = {
+    EndpointKey.DISTANCE_TO_EMPTY: "/api/v1/car/status/{car_id}/dte",
+    EndpointKey.ODOMETER: "/api/v1/car/status/{car_id}/odometer",
+    EndpointKey.EV_BATTERY: "/api/v1/car/status/{car_id}/ev/battery",
+    EndpointKey.EV_CHARGING: "/api/v1/car/status/{car_id}/ev/charging",
+    EndpointKey.LOW_FUEL_WARNING: "/api/v1/car/status/warning/{car_id}/lowFuel",
+    EndpointKey.TIRE_PRESSURE_WARNING: (
+        "/api/v1/car/status/warning/{car_id}/tirePressure"
+    ),
+    EndpointKey.LAMP_WIRE_WARNING: "/api/v1/car/status/warning/{car_id}/lampWire",
+    EndpointKey.SMART_KEY_BATTERY_WARNING: (
+        "/api/v1/car/status/warning/{car_id}/smartKeyBattery"
+    ),
+    EndpointKey.WASHER_FLUID_WARNING: (
+        "/api/v1/car/status/warning/{car_id}/washerFluid"
+    ),
+    EndpointKey.BRAKE_FLUID_WARNING: "/api/v1/car/status/warning/{car_id}/breakOil",
+    EndpointKey.ENGINE_OIL_WARNING: "/api/v1/car/status/warning/{car_id}/engineOil",
+}
+
+WARNING_ENTITY_KEYS: dict[EndpointKey, EntityKey] = {
+    EndpointKey.LOW_FUEL_WARNING: EntityKey.LOW_FUEL_WARNING,
+    EndpointKey.TIRE_PRESSURE_WARNING: EntityKey.TIRE_PRESSURE_WARNING,
+    EndpointKey.LAMP_WIRE_WARNING: EntityKey.LAMP_WIRE_WARNING,
+    EndpointKey.SMART_KEY_BATTERY_WARNING: EntityKey.SMART_KEY_BATTERY_WARNING,
+    EndpointKey.WASHER_FLUID_WARNING: EntityKey.WASHER_FLUID_WARNING,
+    EndpointKey.BRAKE_FLUID_WARNING: EntityKey.BRAKE_FLUID_WARNING,
+    EndpointKey.ENGINE_OIL_WARNING: EntityKey.ENGINE_OIL_WARNING,
+}
+
+DISTANCE_TO_KM = {
+    0: 0.0003048,
+    1: 1.0,
+    2: 0.001,
+    3: 1.609344,
+}
+TIME_TO_MINUTES = {
+    0: 60.0,
+    1: 1.0,
+    2: 1 / 60000,
+    3: 1 / 60,
+}
+CHARGER_TYPES = {0: "not_connected", 1: "fast", 2: "normal"}
+VEHICLE_AUTH_ERROR_CODES = {"4011", "4012", "4016"}
 
 
 class HyundaiKiaApiClient:
@@ -104,50 +150,53 @@ class HyundaiKiaApiClient:
             self._activate_token(token)
             return token.access_token
 
-    async def async_get_metric(self, car_id: str, metric: Metric) -> MetricValue:
-        """Fetch one metric, retrying once after an authorization rejection."""
-        endpoint = "dte" if metric is Metric.DISTANCE_TO_EMPTY else "odometer"
-        url = (
-            f"{BRAND_ENDPOINTS[self.brand].vehicle_base}"
-            f"/api/v1/car/status/{car_id}/{endpoint}"
-        )
+    async def async_get_vehicles(self) -> list[VehicleProfile]:
+        """Return vehicles authorized for this account."""
+        url = f"{BRAND_ENDPOINTS[self.brand].vehicle_base}/api/v1/car/profile/carlist"
+        status, payload = await self._async_authenticated_json(url)
+        error_code = self._error_code(payload)
+        if error_code == "4045":
+            return []
+        self._raise_for_api_error(status, error_code, "Vehicle list")
 
-        for attempt in range(2):
-            access_token = await self.async_ensure_access_token(force=attempt == 1)
-            response = await self._async_get(
-                url, headers={"Authorization": f"Bearer {access_token}"}
-            )
-            if response.status in (401, 403):
-                response.release()
-                self._access_token = None
-                self._access_token_expires_at = 0.0
-                if attempt == 0:
-                    continue
-                raise HyundaiKiaAuthenticationError(
-                    "Vehicle API rejected refreshed credentials"
+        cars = payload.get("cars")
+        if not isinstance(cars, list):
+            raise HyundaiKiaVehicleError("Vehicle list response was malformed")
+
+        vehicles: list[VehicleProfile] = []
+        try:
+            for car in cars:
+                if not isinstance(car, dict) or not str(car.get("carId", "")).strip():
+                    raise ValueError
+                vehicles.append(
+                    VehicleProfile(
+                        car_id=str(car["carId"]).strip(),
+                        nickname=str(car.get("carNickname", "")).strip(),
+                        car_type=str(car.get("carType", "")).strip().upper(),
+                        model_code=str(car.get("carName", "")).strip(),
+                        sales_model=str(car.get("carSellname", "")).strip(),
+                    )
                 )
-            if response.status == 429:
-                response.release()
-                raise HyundaiKiaRateLimitError("Vehicle API rate limit reached")
-            if response.status >= 400:
-                status = response.status
-                response.release()
-                raise HyundaiKiaVehicleError(
-                    f"Vehicle API rejected {metric.value} with HTTP {status}"
-                )
+        except (KeyError, TypeError, ValueError) as err:
+            raise HyundaiKiaVehicleError("Vehicle list response was malformed") from err
+        return vehicles
 
-            payload = await self._async_json(response)
-            return self._parse_metric(metric, payload)
+    async def async_get_endpoint(
+        self, car_id: str, endpoint: EndpointKey
+    ) -> dict[EntityKey, EntityValue]:
+        """Fetch and parse one independently polled vehicle endpoint."""
+        path = ENDPOINT_PATHS[endpoint].format(car_id=car_id)
+        url = f"{BRAND_ENDPOINTS[self.brand].vehicle_base}{path}"
+        status, payload = await self._async_authenticated_json(url)
+        self._raise_for_api_error(status, self._error_code(payload), endpoint.value)
+        return self._parse_endpoint(endpoint, payload)
 
-        raise HyundaiKiaAuthenticationError("Unable to authenticate vehicle request")
-
-    async def async_validate_vehicle(self, car_id: str) -> dict[Metric, MetricValue]:
-        """Validate a car ID by fetching every v1 metric."""
-        values = await asyncio.gather(
-            self.async_get_metric(car_id, Metric.DISTANCE_TO_EMPTY),
-            self.async_get_metric(car_id, Metric.ODOMETER),
+    async def async_validate_vehicle(self, car_id: str) -> None:
+        """Validate a car ID using the two universally supported metrics."""
+        await asyncio.gather(
+            self.async_get_endpoint(car_id, EndpointKey.DISTANCE_TO_EMPTY),
+            self.async_get_endpoint(car_id, EndpointKey.ODOMETER),
         )
-        return dict(zip(Metric, values, strict=True))
 
     def _access_token_is_valid(self) -> bool:
         """Return whether the in-memory access token has adequate lifetime."""
@@ -185,13 +234,8 @@ class HyundaiKiaApiClient:
             raise HyundaiKiaConnectionError("OAuth token request failed") from err
 
         payload = await self._async_json(response)
+        error_code = self._error_code(payload)
         if response.status >= 400:
-            error_code = str(
-                payload.get(
-                    "errCode",
-                    payload.get("resCode", payload.get("error", "unknown")),
-                )
-            )
             if response.status in (400, 401, 403) or error_code == "4002":
                 raise HyundaiKiaAuthenticationError(
                     f"OAuth token request was rejected ({error_code})"
@@ -218,6 +262,27 @@ class HyundaiKiaApiClient:
                 "OAuth token response was incomplete"
             ) from err
 
+    async def _async_authenticated_json(self, url: str) -> tuple[int, dict[str, Any]]:
+        """Make an authenticated GET, retrying once after token rejection."""
+        for attempt in range(2):
+            access_token = await self.async_ensure_access_token(force=attempt == 1)
+            response = await self._async_get(
+                url, headers={"Authorization": f"Bearer {access_token}"}
+            )
+            payload = await self._async_json(response)
+            if response.status in (401, 403):
+                self._access_token = None
+                self._access_token_expires_at = 0.0
+                if attempt == 0:
+                    continue
+                raise HyundaiKiaAuthenticationError(
+                    "Vehicle API rejected refreshed credentials"
+                )
+            if response.status == 429:
+                raise HyundaiKiaRateLimitError("Vehicle API rate limit reached")
+            return response.status, payload
+        raise HyundaiKiaAuthenticationError("Unable to authenticate vehicle request")
+
     async def _async_get(self, url: str, *, headers: dict[str, str]) -> ClientResponse:
         """Make a bounded GET request."""
         try:
@@ -240,28 +305,123 @@ class HyundaiKiaApiClient:
         return payload
 
     @staticmethod
-    def _parse_metric(metric: Metric, payload: dict[str, Any]) -> MetricValue:
-        """Parse one metric response."""
-        try:
-            if metric is Metric.DISTANCE_TO_EMPTY:
-                return MetricValue(
-                    value=float(payload["value"]),
-                    timestamp=(
-                        str(payload["timestamp"]) if payload.get("timestamp") else None
-                    ),
-                )
-
-            odometers = payload["odometers"]
-            if not isinstance(odometers, list) or not odometers:
-                raise ValueError("No odometer values")
-            odometer = odometers[0]
-            return MetricValue(
-                value=float(odometer["value"]),
-                timestamp=(
-                    str(odometer["timestamp"]) if odometer.get("timestamp") else None
-                ),
+    def _error_code(payload: dict[str, Any]) -> str:
+        """Return a provider error code across known response variants."""
+        return str(
+            payload.get(
+                "errCode",
+                payload.get("resCode", payload.get("error", "unknown")),
             )
+        )
+
+    @staticmethod
+    def _raise_for_api_error(status: int, error_code: str, operation: str) -> None:
+        """Classify a vehicle API error without exposing response contents."""
+        if error_code in VEHICLE_AUTH_ERROR_CODES:
+            raise HyundaiKiaAuthenticationError(
+                f"{operation} request was rejected ({error_code})"
+            )
+        if status < 400:
+            if error_code != "unknown":
+                raise HyundaiKiaVehicleError(
+                    f"{operation} request was rejected ({error_code})"
+                )
+            return
+        if status in (401, 403):
+            raise HyundaiKiaAuthenticationError(
+                f"{operation} request was rejected ({error_code})"
+            )
+        raise HyundaiKiaVehicleError(f"{operation} request returned HTTP {status}")
+
+    @classmethod
+    def _parse_endpoint(
+        cls, endpoint: EndpointKey, payload: dict[str, Any]
+    ) -> dict[EntityKey, EntityValue]:
+        """Parse one documented vehicle endpoint response."""
+        try:
+            if endpoint is EndpointKey.DISTANCE_TO_EMPTY:
+                timestamp = cls._timestamp(payload)
+                values = {
+                    EntityKey.DISTANCE_TO_EMPTY: EntityValue(
+                        cls._distance_to_km(payload["value"], payload["unit"]),
+                        timestamp,
+                    )
+                }
+                if payload.get("phevTotalValue") is not None:
+                    values[EntityKey.COMBINED_DISTANCE_TO_EMPTY] = EntityValue(
+                        cls._distance_to_km(
+                            payload["phevTotalValue"], payload["phevTotalUnit"]
+                        ),
+                        timestamp,
+                    )
+                return values
+
+            if endpoint is EndpointKey.ODOMETER:
+                odometers = payload["odometers"]
+                if not isinstance(odometers, list) or not odometers:
+                    raise ValueError
+                odometer = odometers[0]
+                return {
+                    EntityKey.ODOMETER: EntityValue(
+                        cls._distance_to_km(odometer["value"], odometer["unit"]),
+                        str(odometer.get("timestamp", "")) or None,
+                    )
+                }
+
+            if endpoint is EndpointKey.EV_BATTERY:
+                return {
+                    EntityKey.EV_BATTERY_LEVEL: EntityValue(
+                        float(payload["soc"]), cls._timestamp(payload)
+                    )
+                }
+
+            if endpoint is EndpointKey.EV_CHARGING:
+                timestamp = cls._timestamp(payload)
+                plugin = int(payload["batteryPlugin"])
+                values = {
+                    EntityKey.CHARGING: EntityValue(
+                        bool(payload["batteryCharge"]), timestamp
+                    ),
+                    EntityKey.CHARGING_CABLE_CONNECTED: EntityValue(
+                        plugin > 0, timestamp
+                    ),
+                    EntityKey.CHARGER_TYPE: EntityValue(
+                        CHARGER_TYPES.get(plugin, "unknown"), timestamp
+                    ),
+                }
+                target_soc = payload.get("targetSOC")
+                if (
+                    isinstance(target_soc, dict)
+                    and target_soc.get("targetSOClevel") is not None
+                ):
+                    values[EntityKey.TARGET_STATE_OF_CHARGE] = EntityValue(
+                        float(target_soc["targetSOClevel"]), timestamp
+                    )
+                remain_time = payload.get("remainTime")
+                if (
+                    isinstance(remain_time, dict)
+                    and remain_time.get("value") is not None
+                ):
+                    unit = int(remain_time["unit"])
+                    values[EntityKey.REMAINING_CHARGING_TIME] = EntityValue(
+                        float(remain_time["value"]) * TIME_TO_MINUTES[unit],
+                        timestamp,
+                    )
+                return values
+
+            entity_key = WARNING_ENTITY_KEYS[endpoint]
+            return {entity_key: EntityValue(bool(payload["status"]))}
         except (KeyError, TypeError, ValueError, IndexError) as err:
             raise HyundaiKiaVehicleError(
-                f"Vehicle API returned invalid {metric.value} data"
+                f"Vehicle API returned invalid {endpoint.value} data"
             ) from err
+
+    @staticmethod
+    def _distance_to_km(value: Any, unit: Any) -> float:
+        """Convert a documented distance value to kilometres."""
+        return float(value) * DISTANCE_TO_KM[int(unit)]
+
+    @staticmethod
+    def _timestamp(payload: dict[str, Any]) -> str | None:
+        """Return an optional vehicle timestamp."""
+        return str(payload.get("timestamp", "")) or None
