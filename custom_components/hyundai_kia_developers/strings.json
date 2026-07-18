@@ -1,0 +1,117 @@
+{
+  "title": "Hyundai Kia Developers",
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "title": "Connect a developer account",
+        "description": "Enter the developer application credentials registered for this Hyundai or Kia account.",
+        "data": {
+          "brand": "Brand",
+          "account_name": "Account name",
+          "client_id": "Client ID",
+          "client_secret": "Client secret",
+          "redirect_uri": "Registered redirect URI"
+        }
+      },
+      "authorize": {
+        "title": "Authorize {brand}",
+        "description": "Open the [authorization page]({authorization_url}), complete login, then paste the entire redirected URL below. The pasted URL and one-time code are not stored.",
+        "data": {
+          "redirect_url": "Redirected URL"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate account",
+        "description": "This account can no longer refresh its access token. Continue to authorize it again using the saved developer credentials."
+      },
+      "reconfigure": {
+        "title": "Update developer credentials",
+        "description": "Change the account or developer application details, then authorize the account again. Leave Client secret empty to keep the saved value.",
+        "data": {
+          "brand": "Brand",
+          "account_name": "Account name",
+          "client_id": "Client ID",
+          "client_secret": "New client secret",
+          "redirect_uri": "Registered redirect URI"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to the vehicle API.",
+      "invalid_auth": "Authorization failed. Check the pasted URL and developer credentials.",
+      "invalid_redirect_uri": "Enter a valid HTTPS redirect URI."
+    },
+    "abort": {
+      "already_configured": "This account or vehicle is already configured.",
+      "cannot_connect": "Unable to connect to the vehicle API.",
+      "wrong_account": "The authorized account cannot access the existing vehicle."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Polling options",
+        "description": "Choose how often enabled vehicle sensors are refreshed.",
+        "data": {
+          "scan_interval": "Polling interval (minutes)"
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "vehicle": {
+      "entry_type": "Vehicle",
+      "initiate_flow": {
+        "user": "Add vehicle"
+      },
+      "step": {
+        "user": {
+          "title": "Add a vehicle",
+          "description": "Enter a friendly name and the car ID available to this authenticated account.",
+          "data": {
+            "car_name": "Vehicle name",
+            "car_id": "Car ID"
+          }
+        },
+        "reconfigure": {
+          "title": "Update vehicle",
+          "description": "Rename the vehicle or replace its car ID.",
+          "data": {
+            "car_name": "Vehicle name",
+            "car_id": "Car ID"
+          }
+        }
+      },
+      "error": {
+        "cannot_connect": "Unable to connect to the vehicle API.",
+        "invalid_auth": "The account needs to be reauthenticated.",
+        "invalid_vehicle": "The account could not read both required metrics for this car ID."
+      },
+      "abort": {
+        "already_configured": "This vehicle is already configured."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "distance_to_empty": {
+        "name": "Distance to empty"
+      },
+      "odometer": {
+        "name": "Odometer"
+      }
+    }
+  },
+  "exceptions": {
+    "cannot_connect": {
+      "message": "Unable to connect to the Hyundai/Kia developer API."
+    },
+    "invalid_auth": {
+      "message": "The Hyundai/Kia developer account needs to be reauthenticated."
+    },
+    "update_failed": {
+      "message": "Unable to update any configured vehicle metric."
+    }
+  }
+}

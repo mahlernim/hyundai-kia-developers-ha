@@ -1,0 +1,117 @@
+{
+  "title": "Hyundai Kia Developers",
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "title": "개발자 계정 연결",
+        "description": "현대 또는 기아 계정에 등록된 개발자 애플리케이션 자격 증명을 입력하세요.",
+        "data": {
+          "brand": "브랜드",
+          "account_name": "계정 이름",
+          "client_id": "클라이언트 ID",
+          "client_secret": "클라이언트 시크릿",
+          "redirect_uri": "등록된 리디렉션 URI"
+        }
+      },
+      "authorize": {
+        "title": "{brand} 인증",
+        "description": "[인증 페이지]({authorization_url})를 열어 로그인한 다음, 리디렉션된 전체 URL을 아래에 붙여넣으세요. 붙여넣은 URL과 일회용 코드는 저장되지 않습니다.",
+        "data": {
+          "redirect_url": "리디렉션된 URL"
+        }
+      },
+      "reauth_confirm": {
+        "title": "계정 재인증",
+        "description": "이 계정은 더 이상 액세스 토큰을 갱신할 수 없습니다. 저장된 개발자 자격 증명으로 다시 인증하려면 계속하세요."
+      },
+      "reconfigure": {
+        "title": "개발자 자격 증명 변경",
+        "description": "계정 또는 개발자 애플리케이션 정보를 변경한 후 다시 인증하세요. 저장된 값을 유지하려면 클라이언트 시크릿을 비워 두세요.",
+        "data": {
+          "brand": "브랜드",
+          "account_name": "계정 이름",
+          "client_id": "클라이언트 ID",
+          "client_secret": "새 클라이언트 시크릿",
+          "redirect_uri": "등록된 리디렉션 URI"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "차량 API에 연결할 수 없습니다.",
+      "invalid_auth": "인증에 실패했습니다. 붙여넣은 URL과 개발자 자격 증명을 확인하세요.",
+      "invalid_redirect_uri": "올바른 HTTPS 리디렉션 URI를 입력하세요."
+    },
+    "abort": {
+      "already_configured": "이 계정 또는 차량은 이미 구성되어 있습니다.",
+      "cannot_connect": "차량 API에 연결할 수 없습니다.",
+      "wrong_account": "인증한 계정에서 기존 차량에 접근할 수 없습니다."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "폴링 옵션",
+        "description": "활성화된 차량 센서를 새로 고칠 간격을 선택하세요.",
+        "data": {
+          "scan_interval": "폴링 간격(분)"
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "vehicle": {
+      "entry_type": "차량",
+      "initiate_flow": {
+        "user": "차량 추가"
+      },
+      "step": {
+        "user": {
+          "title": "차량 추가",
+          "description": "이 인증 계정에서 사용할 수 있는 차량 ID와 표시 이름을 입력하세요.",
+          "data": {
+            "car_name": "차량 이름",
+            "car_id": "차량 ID"
+          }
+        },
+        "reconfigure": {
+          "title": "차량 변경",
+          "description": "차량 이름을 변경하거나 차량 ID를 교체하세요.",
+          "data": {
+            "car_name": "차량 이름",
+            "car_id": "차량 ID"
+          }
+        }
+      },
+      "error": {
+        "cannot_connect": "차량 API에 연결할 수 없습니다.",
+        "invalid_auth": "계정을 다시 인증해야 합니다.",
+        "invalid_vehicle": "이 차량 ID의 필수 센서 두 개를 모두 읽을 수 없습니다."
+      },
+      "abort": {
+        "already_configured": "이 차량은 이미 구성되어 있습니다."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "distance_to_empty": {
+        "name": "주행 가능 거리"
+      },
+      "odometer": {
+        "name": "누적 주행 거리"
+      }
+    }
+  },
+  "exceptions": {
+    "cannot_connect": {
+      "message": "현대/기아 개발자 API에 연결할 수 없습니다."
+    },
+    "invalid_auth": {
+      "message": "현대/기아 개발자 계정을 다시 인증해야 합니다."
+    },
+    "update_failed": {
+      "message": "구성된 차량 센서를 업데이트할 수 없습니다."
+    }
+  }
+}
