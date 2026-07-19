@@ -16,13 +16,11 @@ body:
           required: true
         - label: I removed credentials, redirect codes/URLs, tokens, and car IDs from everything attached.
           required: true
-        - label: I generated Home Assistant diagnostics and manually confirmed that they are redacted.
-          required: true
   - type: input
     id: version
     attributes:
       label: Integration version
-      placeholder: 0.2.1
+      placeholder: 0.2.2
     validations:
       required: true
   - type: input
@@ -58,11 +56,9 @@ body:
   - type: textarea
     id: diagnostics
     attributes:
-      label: Redacted diagnostics or logs
-      description: Drag in redacted Home Assistant diagnostics or a short redacted log excerpt. Never paste credentials, redirect codes, tokens, or car IDs.
+      label: Redacted diagnostics or logs (optional)
+      description: If available, attach redacted Home Assistant diagnostics or a short redacted log excerpt. Never paste credentials, redirect codes, tokens, or car IDs.
       render: text
-    validations:
-      required: true
   - type: textarea
     id: context
     attributes:
