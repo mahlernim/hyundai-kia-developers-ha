@@ -54,6 +54,7 @@ from .exceptions import (
     HyundaiKiaAuthenticationError,
     HyundaiKiaConnectionError,
     HyundaiKiaError,
+    HyundaiKiaOAuthRedirectError,
     HyundaiKiaVehicleError,
 )
 from .models import HyundaiKiaConfigEntry, TokenResponse, VehicleProfile
@@ -190,18 +191,24 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
                     str(self._pending[CONF_REDIRECT_URI]),
                     self._oauth_state,
                 )
-                self._token = await self._api.async_exchange_authorization_code(code)
-                if not self._token.refresh_token:
-                    raise HyundaiKiaAuthenticationError(
-                        "Authorization response had no refresh token"
+            except HyundaiKiaOAuthRedirectError as err:
+                errors["base"] = err.error_key
+            else:
+                try:
+                    self._token = await self._api.async_exchange_authorization_code(
+                        code
                     )
-                if self._flow_mode == "user":
-                    return await self.async_step_vehicle()
-                return await self._finish_existing_authorization()
-            except HyundaiKiaAuthenticationError:
-                errors["base"] = "invalid_auth"
-            except HyundaiKiaConnectionError:
-                errors["base"] = "cannot_connect"
+                except HyundaiKiaAuthenticationError:
+                    errors["base"] = "oauth_token_exchange_failed"
+                except HyundaiKiaConnectionError:
+                    errors["base"] = "cannot_connect"
+                else:
+                    if not self._token.refresh_token:
+                        errors["base"] = "oauth_missing_refresh_token"
+                    elif self._flow_mode == "user":
+                        return await self.async_step_vehicle()
+                    else:
+                        return await self._finish_existing_authorization()
         return self._show_authorize_form(errors)
 
     async def async_step_vehicle(

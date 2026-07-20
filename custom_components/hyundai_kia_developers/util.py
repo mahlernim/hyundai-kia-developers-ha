@@ -6,7 +6,7 @@ import hmac
 from hashlib import sha256
 from urllib.parse import parse_qs, urlparse
 
-from .exceptions import HyundaiKiaAuthenticationError
+from .exceptions import HyundaiKiaOAuthRedirectError
 
 
 def vehicle_key(brand: str, car_id: str) -> str:
@@ -25,15 +25,15 @@ def parse_authorization_redirect(
         or pasted.netloc.lower() != expected.netloc.lower()
         or pasted.path.rstrip("/") != expected.path.rstrip("/")
     ):
-        raise HyundaiKiaAuthenticationError("OAuth redirect URL does not match")
+        raise HyundaiKiaOAuthRedirectError("oauth_redirect_mismatch")
 
     query = parse_qs(pasted.query, keep_blank_values=True)
     if query.get("error"):
-        raise HyundaiKiaAuthenticationError("OAuth provider returned an error")
+        raise HyundaiKiaOAuthRedirectError("oauth_provider_error")
     state = query.get("state", [""])[0]
     if not state or not hmac.compare_digest(state, expected_state):
-        raise HyundaiKiaAuthenticationError("OAuth state did not match")
+        raise HyundaiKiaOAuthRedirectError("oauth_state_mismatch")
     code = query.get("code", [""])[0]
     if not code:
-        raise HyundaiKiaAuthenticationError("OAuth redirect URL has no code")
+        raise HyundaiKiaOAuthRedirectError("oauth_missing_code")
     return code

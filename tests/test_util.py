@@ -3,7 +3,7 @@
 import pytest
 
 from custom_components.hyundai_kia_developers.exceptions import (
-    HyundaiKiaAuthenticationError,
+    HyundaiKiaOAuthRedirectError,
 )
 from custom_components.hyundai_kia_developers.util import (
     parse_authorization_redirect,
@@ -24,22 +24,38 @@ def test_parse_authorization_redirect() -> None:
 
 
 @pytest.mark.parametrize(
-    "url",
+    ("url", "error_key"),
     [
-        "https://wrong.example/redirect?code=code&state=expected",
-        "https://example.com/redirect?code=code&state=wrong",
-        "https://example.com/redirect?state=expected",
-        "https://example.com/redirect?error=access_denied&state=expected",
+        (
+            "https://wrong.example/redirect?code=code&state=expected",
+            "oauth_redirect_mismatch",
+        ),
+        (
+            "https://example.com/redirect?code=code&state=wrong",
+            "oauth_state_mismatch",
+        ),
+        (
+            "https://example.com/redirect?state=expected",
+            "oauth_missing_code",
+        ),
+        (
+            "https://example.com/redirect?error=access_denied&state=expected",
+            "oauth_provider_error",
+        ),
     ],
 )
-def test_parse_authorization_redirect_rejects_invalid_input(url: str) -> None:
-    """Redirect origin, state, errors, and missing codes are validated."""
-    with pytest.raises(HyundaiKiaAuthenticationError):
+def test_parse_authorization_redirect_rejects_invalid_input(
+    url: str, error_key: str
+) -> None:
+    """Invalid redirects expose an actionable key without retaining the URL."""
+    with pytest.raises(HyundaiKiaOAuthRedirectError) as exc_info:
         parse_authorization_redirect(
             url,
             "https://example.com/redirect",
             "expected",
         )
+    assert exc_info.value.error_key == error_key
+    assert url not in str(exc_info.value)
 
 
 def test_vehicle_key_is_stable_and_brand_scoped() -> None:
