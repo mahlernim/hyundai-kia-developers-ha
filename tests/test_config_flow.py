@@ -288,6 +288,28 @@ def test_reconfigure_schema_cannot_change_brand() -> None:
     assert keys == {CONF_CLIENT_ID, CONF_CLIENT_SECRET, CONF_REDIRECT_URI}
 
 
+def test_authorize_form_supplies_registered_redirect_placeholder() -> None:
+    """Authorization guidance can safely reference the configured redirect URI."""
+    flow = HyundaiKiaConfigFlow()
+    flow._pending = {
+        CONF_BRAND: Brand.HYUNDAI,
+        CONF_REDIRECT_URI: VALID_REDIRECT_URI,
+    }
+    flow._oauth_state = "state"
+    flow._api = MagicMock()
+    flow._api.authorization_url.return_value = "https://authorize.example"
+    flow.async_show_form = MagicMock(return_value={"step_id": "authorize"})
+
+    result = flow._show_authorize_form({"base": "oauth_missing_code"})
+
+    assert result == {"step_id": "authorize"}
+    assert flow.async_show_form.call_args.kwargs["description_placeholders"] == {
+        "authorization_url": "https://authorize.example",
+        "brand": "Hyundai",
+        "redirect_uri": VALID_REDIRECT_URI,
+    }
+
+
 def test_recovery_menu_steps_have_handlers() -> None:
     """Home Assistant can route both discovery recovery menus."""
     for handler in (HyundaiKiaConfigFlow, VehicleSubentryFlowHandler):

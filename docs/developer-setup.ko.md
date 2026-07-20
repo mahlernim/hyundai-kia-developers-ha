@@ -23,13 +23,15 @@
 2. 개발 프로젝트를 만들고 콘솔에 표시되는 약관에 동의합니다.
 3. 프로젝트의 **Client ID**와 **Client Secret**을 비밀번호 관리자에
    보관합니다.
-4. **Account API Redirect URL**을 다음과 정확히 입력합니다.
+4. **설정 → 계정 API**를 열고 **Redirect URL**을 다음과 정확히 입력합니다.
 
    ```text
    https://example.com/redirect
    ```
 
-   URL 끝에 `/`를 추가하지 마세요.
+   이 항목 옆의 **저장**을 누르세요. URL 끝에 `/`를 추가하지 마세요. **데이터
+   API**의 Redirect URL이나 Callback URL이 아닌 **계정 API** Redirect URL에
+   입력해야 합니다.
 
 Client ID, Client Secret 또는 인증 코드가 포함된 OAuth 리디렉션 URL을 커밋,
 게시 또는 스크린샷으로 공유하지 마세요.

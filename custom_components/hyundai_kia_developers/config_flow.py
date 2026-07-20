@@ -482,6 +482,7 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
             description_placeholders={
                 "authorization_url": self._api.authorization_url(self._oauth_state),
                 "brand": Brand(str(self._pending[CONF_BRAND])).value.title(),
+                "redirect_uri": str(self._pending[CONF_REDIRECT_URI]),
             },
         )
 
