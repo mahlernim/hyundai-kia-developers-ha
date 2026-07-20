@@ -9,6 +9,7 @@ from aiohttp import ClientSession
 
 from custom_components.hyundai_kia_developers.api import (
     DISTANCE_TO_KM,
+    ENDPOINT_PATHS,
     TIME_TO_MINUTES,
     HyundaiKiaApiClient,
 )
@@ -315,5 +316,65 @@ async def test_vehicle_api_session_error_requests_reauthentication() -> None:
         payload={"errCode": "4012", "errMsg": "Invalid session"},
     )
 
-    with pytest.raises(HyundaiKiaAuthenticationError):
+    with pytest.raises(HyundaiKiaAuthenticationError) as exc_info:
         await api.async_get_vehicles()
+
+    assert exc_info.value.error_code == "4012"
+    assert exc_info.value.operation == "Vehicle list"
+    assert exc_info.value.status == 400
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "no_data_endpoint", (EndpointKey.DISTANCE_TO_EMPTY, EndpointKey.ODOMETER)
+)
+async def test_vehicle_validation_allows_one_core_metric_without_data(
+    no_data_endpoint: EndpointKey,
+) -> None:
+    """A temporary 4045 for either core metric does not block setup."""
+    session = FakeSession()
+    api = make_api(session)
+    base = BRAND_ENDPOINTS[Brand.KIA].vehicle_base
+    responses = {
+        EndpointKey.DISTANCE_TO_EMPTY: {"value": 50, "unit": 1},
+        EndpointKey.ODOMETER: {"odometers": [{"value": 1000, "unit": 1}]},
+    }
+    for endpoint in (EndpointKey.DISTANCE_TO_EMPTY, EndpointKey.ODOMETER):
+        kwargs: dict[str, Any] = {"payload": responses[endpoint]}
+        if endpoint is no_data_endpoint:
+            kwargs = {
+                "status": 404,
+                "payload": {"errCode": "4045", "errMsg": "No data"},
+            }
+        session.add(
+            "GET",
+            f"{base}{ENDPOINT_PATHS[endpoint].format(car_id='car-1')}",
+            **kwargs,
+        )
+
+    await api.async_validate_vehicle("car-1")
+
+
+@pytest.mark.asyncio
+async def test_vehicle_validation_preserves_actionable_provider_error() -> None:
+    """A non-4045 validation failure retains its endpoint and provider code."""
+    session = FakeSession()
+    api = make_api(session)
+    base = BRAND_ENDPOINTS[Brand.KIA].vehicle_base
+    session.add(
+        "GET",
+        f"{base}{ENDPOINT_PATHS[EndpointKey.DISTANCE_TO_EMPTY].format(car_id='car-1')}",
+        status=403,
+        payload={"errCode": "5005", "errMsg": "No Agreement"},
+    )
+    session.add(
+        "GET",
+        f"{base}{ENDPOINT_PATHS[EndpointKey.ODOMETER].format(car_id='car-1')}",
+        payload={"odometers": [{"value": 1000, "unit": 1}]},
+    )
+
+    with pytest.raises(HyundaiKiaVehicleError) as exc_info:
+        await api.async_validate_vehicle("car-1")
+
+    assert exc_info.value.error_code == "5005"
+    assert exc_info.value.operation == EndpointKey.DISTANCE_TO_EMPTY.value

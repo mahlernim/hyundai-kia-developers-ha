@@ -73,6 +73,7 @@ TIME_TO_MINUTES = {
 }
 CHARGER_TYPES = {0: "not_connected", 1: "fast", 2: "normal"}
 VEHICLE_AUTH_ERROR_CODES = {"4011", "4012", "4016"}
+VEHICLE_NO_DATA_ERROR_CODE = "4045"
 
 
 class HyundaiKiaApiClient:
@@ -192,11 +193,20 @@ class HyundaiKiaApiClient:
         return self._parse_endpoint(endpoint, payload)
 
     async def async_validate_vehicle(self, car_id: str) -> None:
-        """Validate a car ID using the two universally supported metrics."""
-        await asyncio.gather(
+        """Validate a car ID while allowing temporarily unavailable metrics."""
+        results = await asyncio.gather(
             self.async_get_endpoint(car_id, EndpointKey.DISTANCE_TO_EMPTY),
             self.async_get_endpoint(car_id, EndpointKey.ODOMETER),
+            return_exceptions=True,
         )
+        for result in results:
+            if (
+                isinstance(result, HyundaiKiaVehicleError)
+                and result.error_code == VEHICLE_NO_DATA_ERROR_CODE
+            ):
+                continue
+            if isinstance(result, BaseException):
+                raise result
 
     def _access_token_is_valid(self) -> bool:
         """Return whether the in-memory access token has adequate lifetime."""
@@ -270,14 +280,15 @@ class HyundaiKiaApiClient:
                 url, headers={"Authorization": f"Bearer {access_token}"}
             )
             payload = await self._async_json(response)
-            if response.status in (401, 403):
+            error_code = self._error_code(payload)
+            if response.status in (401, 403) and (
+                error_code in VEHICLE_AUTH_ERROR_CODES or error_code == "unknown"
+            ):
                 self._access_token = None
                 self._access_token_expires_at = 0.0
                 if attempt == 0:
                     continue
-                raise HyundaiKiaAuthenticationError(
-                    "Vehicle API rejected refreshed credentials"
-                )
+                return response.status, payload
             if response.status == 429:
                 raise HyundaiKiaRateLimitError("Vehicle API rate limit reached")
             return response.status, payload
@@ -319,19 +330,33 @@ class HyundaiKiaApiClient:
         """Classify a vehicle API error without exposing response contents."""
         if error_code in VEHICLE_AUTH_ERROR_CODES:
             raise HyundaiKiaAuthenticationError(
-                f"{operation} request was rejected ({error_code})"
+                f"{operation} request was rejected ({error_code})",
+                error_code=error_code,
+                operation=operation,
+                status=status,
+            )
+        if error_code != "unknown":
+            raise HyundaiKiaVehicleError(
+                f"{operation} request was rejected ({error_code})",
+                error_code=error_code,
+                operation=operation,
+                status=status,
             )
         if status < 400:
-            if error_code != "unknown":
-                raise HyundaiKiaVehicleError(
-                    f"{operation} request was rejected ({error_code})"
-                )
             return
         if status in (401, 403):
             raise HyundaiKiaAuthenticationError(
-                f"{operation} request was rejected ({error_code})"
+                f"{operation} request was rejected ({error_code})",
+                error_code=error_code,
+                operation=operation,
+                status=status,
             )
-        raise HyundaiKiaVehicleError(f"{operation} request returned HTTP {status}")
+        raise HyundaiKiaVehicleError(
+            f"{operation} request returned HTTP {status}",
+            error_code=None if error_code == "unknown" else error_code,
+            operation=operation,
+            status=status,
+        )
 
     @classmethod
     def _parse_endpoint(
