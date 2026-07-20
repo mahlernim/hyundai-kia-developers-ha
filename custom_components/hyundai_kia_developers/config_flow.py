@@ -50,6 +50,7 @@ from .const import (
     MIN_SCAN_INTERVAL,
     SUBENTRY_TYPE_VEHICLE,
     Brand,
+    EndpointKey,
 )
 from .exceptions import (
     HyundaiKiaAuthenticationError,
@@ -201,6 +202,42 @@ def _vehicle_label(profile: VehicleProfile) -> str:
     return f"{profile.suggested_name} (••••{suffix})"
 
 
+PROVIDER_ERROR_KEYS = {
+    "4002": "vehicle_invalid_request",
+    "4011": "vehicle_invalid_header",
+    "4012": "vehicle_invalid_session",
+    "4014": "vehicle_service_terms_required",
+    "4016": "vehicle_unauthorized_client",
+    "4043": "vehicle_unregistered_user",
+    "4046": "vehicle_not_registered",
+    "4120": "vehicle_precondition_required",
+    "5001": "vehicle_provider_internal_error",
+    "5004": "vehicle_provider_permission_error",
+    "5005": "vehicle_agreement_required",
+    "5006": "vehicle_permission_required",
+    "5007": "vehicle_service_not_registered",
+    "5008": "vehicle_service_not_defined",
+    "5031": "vehicle_remote_control_unavailable",
+    "5032": "vehicle_service_unavailable",
+    "5041": "vehicle_gateway_timeout",
+    "9999": "vehicle_provider_undefined_error",
+}
+
+PROVIDER_OPERATION_LABELS = {
+    EndpointKey.DISTANCE_TO_EMPTY.value: "DTE",
+    EndpointKey.ODOMETER.value: "odometer",
+}
+
+
+def _provider_error_details(error: HyundaiKiaError) -> tuple[str, dict[str, str]]:
+    """Return a translated error key and safe provider context."""
+    error_key = PROVIDER_ERROR_KEYS.get(error.error_code or "", "invalid_vehicle")
+    operation = PROVIDER_OPERATION_LABELS.get(
+        error.operation or "", error.operation or "vehicle data"
+    )
+    return error_key, {"operation": operation}
+
+
 class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle account configuration."""
 
@@ -314,6 +351,7 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
         """Collect an editable name for the selected vehicle."""
         assert self._selected_vehicle and self._api
         errors: dict[str, str] = {}
+        placeholders = {"vehicle": _vehicle_label(self._selected_vehicle)}
         if user_input is not None:
             name = str(user_input[CONF_CAR_NAME]).strip()
             if not name:
@@ -323,12 +361,14 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
                     await self._api.async_validate_vehicle(
                         self._selected_vehicle.car_id
                     )
-                except HyundaiKiaAuthenticationError:
-                    errors["base"] = "invalid_auth"
+                except HyundaiKiaAuthenticationError as err:
+                    errors["base"], details = _provider_error_details(err)
+                    placeholders.update(details)
                 except HyundaiKiaConnectionError:
                     errors["base"] = "cannot_connect"
-                except HyundaiKiaError:
-                    errors["base"] = "invalid_vehicle"
+                except HyundaiKiaError as err:
+                    errors["base"], details = _provider_error_details(err)
+                    placeholders.update(details)
                 else:
                     return await self._create_account_entry(
                         name, self._selected_vehicle
@@ -337,9 +377,7 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="vehicle_name",
             data_schema=_vehicle_name_schema(self._selected_vehicle.suggested_name),
             errors=errors,
-            description_placeholders={
-                "vehicle": _vehicle_label(self._selected_vehicle)
-            },
+            description_placeholders=placeholders,
         )
 
     async def async_step_retry(
@@ -373,6 +411,7 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
         """Manually add the first vehicle after discovery failure."""
         assert self._api
         errors: dict[str, str] = {}
+        placeholders: dict[str, str] = {}
         if user_input is not None:
             car_id = str(user_input[CONF_CAR_ID]).strip()
             name = str(user_input[CONF_CAR_NAME]).strip()
@@ -383,12 +422,14 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
             else:
                 try:
                     await self._api.async_validate_vehicle(car_id)
-                except HyundaiKiaAuthenticationError:
-                    errors["base"] = "invalid_auth"
+                except HyundaiKiaAuthenticationError as err:
+                    errors["base"], details = _provider_error_details(err)
+                    placeholders.update(details)
                 except HyundaiKiaConnectionError:
                     errors["base"] = "cannot_connect"
-                except HyundaiKiaError:
-                    errors["base"] = "invalid_vehicle"
+                except HyundaiKiaError as err:
+                    errors["base"], details = _provider_error_details(err)
+                    placeholders.update(details)
                 else:
                     profile = VehicleProfile(car_id, "", "", "", "")
                     return await self._create_account_entry(name, profile)
@@ -396,6 +437,7 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="manual",
             data_schema=_manual_vehicle_schema(user_input),
             errors=errors,
+            description_placeholders=placeholders,
         )
 
     async def async_step_reauth(
@@ -679,6 +721,7 @@ class VehicleSubentryFlowHandler(ConfigSubentryFlow):
         """Collect the selected vehicle's friendly name."""
         assert self._selected_vehicle and self._api
         errors: dict[str, str] = {}
+        placeholders = {"vehicle": _vehicle_label(self._selected_vehicle)}
         if user_input is not None:
             name = str(user_input[CONF_CAR_NAME]).strip()
             if not name:
@@ -693,8 +736,9 @@ class VehicleSubentryFlowHandler(ConfigSubentryFlow):
                     return self.async_abort(reason="reauth_required")
                 except HyundaiKiaConnectionError:
                     errors["base"] = "cannot_connect"
-                except HyundaiKiaError:
-                    errors["base"] = "invalid_vehicle"
+                except HyundaiKiaError as err:
+                    errors["base"], details = _provider_error_details(err)
+                    placeholders.update(details)
                 else:
                     data = {CONF_CAR_ID: self._selected_vehicle.car_id}
                     if self._selected_vehicle.car_type:
@@ -710,9 +754,7 @@ class VehicleSubentryFlowHandler(ConfigSubentryFlow):
             step_id="vehicle_name",
             data_schema=_vehicle_name_schema(self._selected_vehicle.suggested_name),
             errors=errors,
-            description_placeholders={
-                "vehicle": _vehicle_label(self._selected_vehicle)
-            },
+            description_placeholders=placeholders,
         )
 
     async def async_step_retry(
@@ -747,6 +789,7 @@ class VehicleSubentryFlowHandler(ConfigSubentryFlow):
         entry = self._get_entry()
         self._api = self._api or self._build_api(entry)
         errors: dict[str, str] = {}
+        placeholders: dict[str, str] = {}
         if user_input is not None:
             car_id = str(user_input[CONF_CAR_ID]).strip()
             name = str(user_input[CONF_CAR_NAME]).strip()
@@ -763,8 +806,9 @@ class VehicleSubentryFlowHandler(ConfigSubentryFlow):
                     return self.async_abort(reason="reauth_required")
                 except HyundaiKiaConnectionError:
                     errors["base"] = "cannot_connect"
-                except HyundaiKiaError:
-                    errors["base"] = "invalid_vehicle"
+                except HyundaiKiaError as err:
+                    errors["base"], details = _provider_error_details(err)
+                    placeholders.update(details)
                 else:
                     return self.async_create_entry(
                         title=name,
@@ -775,6 +819,7 @@ class VehicleSubentryFlowHandler(ConfigSubentryFlow):
             step_id="manual",
             data_schema=_manual_vehicle_schema(user_input),
             errors=errors,
+            description_placeholders=placeholders,
         )
 
     async def async_step_reconfigure(

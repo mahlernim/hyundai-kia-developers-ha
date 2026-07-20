@@ -12,6 +12,7 @@ from custom_components.hyundai_kia_developers.config_flow import (
     _credentials_schema,
     _next_account_title,
     _prepare_credentials,
+    _provider_error_details,
     _vehicle_label,
 )
 from custom_components.hyundai_kia_developers.const import (
@@ -19,9 +20,11 @@ from custom_components.hyundai_kia_developers.const import (
     CONF_REDIRECT_URI,
     CONF_REDIRECT_URL,
     Brand,
+    EndpointKey,
 )
 from custom_components.hyundai_kia_developers.exceptions import (
     HyundaiKiaAuthenticationError,
+    HyundaiKiaVehicleError,
 )
 from custom_components.hyundai_kia_developers.models import VehicleProfile
 
@@ -258,6 +261,29 @@ def test_suggested_name_fallbacks() -> None:
     """Sales model and model code are deterministic naming fallbacks."""
     assert VehicleProfile("1", "", "EV", "CV", "EV6").suggested_name == "EV6"
     assert VehicleProfile("1", "", "EV", "CV", "").suggested_name == "CV"
+
+
+@pytest.mark.parametrize(
+    ("error_code", "error_key"),
+    [
+        ("4002", "vehicle_invalid_request"),
+        ("5005", "vehicle_agreement_required"),
+        ("5006", "vehicle_permission_required"),
+        ("5032", "vehicle_service_unavailable"),
+        ("9999", "vehicle_provider_undefined_error"),
+    ],
+)
+def test_provider_errors_have_actionable_config_flow_messages(
+    error_code: str, error_key: str
+) -> None:
+    """Known provider codes select specific guidance and safe endpoint context."""
+    error = HyundaiKiaVehicleError(
+        "request failed",
+        error_code=error_code,
+        operation=EndpointKey.DISTANCE_TO_EMPTY.value,
+    )
+
+    assert _provider_error_details(error) == (error_key, {"operation": "DTE"})
 
 
 def test_account_titles_are_generated_per_brand() -> None:

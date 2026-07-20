@@ -4,6 +4,20 @@
 class HyundaiKiaError(Exception):
     """Base integration error."""
 
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        error_code: str | None = None,
+        operation: str | None = None,
+        status: int | None = None,
+    ) -> None:
+        """Retain safe provider diagnostics for actionable UI errors."""
+        self.error_code = error_code
+        self.operation = operation
+        self.status = status
+        super().__init__(message)
+
 
 class HyundaiKiaAuthenticationError(HyundaiKiaError):
     """Authentication failed and user action is required."""

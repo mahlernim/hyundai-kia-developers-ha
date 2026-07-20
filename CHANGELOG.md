@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.5
+
+- Allowed vehicle setup to continue when the DTE or odometer endpoint reports
+  provider error `4045` because current vehicle data is temporarily unavailable.
+- Preserved safe provider error codes and endpoint context during validation.
+- Added actionable English and Korean setup guidance for every documented
+  vehicle API error code.
+
 ## 0.2.4
 
 - Trimmed surrounding whitespace from developer credentials and redirect URIs.
