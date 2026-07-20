@@ -23,13 +23,15 @@ once for Kia.
 1. Join the developer service for the correct brand and sign in to its console.
 2. Create a development project and accept the terms shown by the console.
 3. Copy the project's **Client ID** and **Client Secret** to a password manager.
-4. Set the **Account API Redirect URL** to exactly:
+4. Open **Settings → Account API**, set its **Redirect URL** to exactly:
 
    ```text
    https://example.com/redirect
    ```
 
-   Do not add a trailing slash.
+   Click **Save** beside this field. Do not add a trailing slash. This must be
+   the **Account API** Redirect URL, not either Redirect URL or Callback URL
+   under **Data API**.
 
 Never commit, post, or screenshot the Client ID, Client Secret, or an OAuth
 redirect URL containing an authorization code.

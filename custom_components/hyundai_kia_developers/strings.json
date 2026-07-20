@@ -12,9 +12,13 @@
           "redirect_uri": "Registered redirect URI"
         }
       },
+      "credential_warning": {
+        "title": "Check developer credential format",
+        "description": "One or both credentials differ from the commonly observed formats. A UUID-shaped Client ID and a 48-character Client secret containing only ASCII letters and numbers are typical. Other formats may still be valid. Continue to use these credentials, or go back to check them."
+      },
       "authorize": {
         "title": "Authorize {brand}",
-        "description": "Open the [authorization page]({authorization_url}), complete login, then paste the entire redirected URL. An error page at example.com is expected; copy its address-bar URL. Codes are single-use and are not stored.",
+        "description": "Before continuing, confirm that the developer console's Account API Redirect URL is saved as `{redirect_uri}`. Then open the [authorization page]({authorization_url}), complete login, and paste the entire redirected URL. An error page at example.com is expected; copy its address-bar URL. Codes are single-use and are not stored.",
         "data": {
           "redirect_url": "Redirected URL"
         }
@@ -78,12 +82,14 @@
     "error": {
       "cannot_connect": "Unable to connect to the vehicle API.",
       "invalid_auth": "Authorization failed. Start again and paste a newly redirected URL.",
+      "invalid_client_id": "Enter the Client ID issued for this developer project, not a sample placeholder.",
+      "invalid_client_secret": "Enter the Client secret issued for this developer project, not a sample placeholder.",
       "invalid_redirect_uri": "Enter a valid HTTPS redirect URI.",
       "invalid_vehicle": "The account could not read the required vehicle data.",
-      "oauth_missing_code": "The pasted URL has no authorization code. Complete login and vehicle consent, then paste the final https://example.com/redirect URL.",
+      "oauth_missing_code": "The pasted URL has no authorization code. Confirm that the Account API Redirect URL is saved as {redirect_uri}, complete login and vehicle consent, then paste the final redirected URL.",
       "oauth_missing_refresh_token": "The provider accepted the authorization code but returned no refresh token. Start a new authorization attempt.",
       "oauth_provider_error": "The provider returned an authorization error. Start again, sign in with the connected-car account, select a vehicle, and approve access.",
-      "oauth_redirect_mismatch": "This is not the registered redirect URL. Paste the complete address that starts with https://example.com/redirect after login and vehicle consent.",
+      "oauth_redirect_mismatch": "This is not the registered redirect URL. Confirm that the Account API Redirect URL is saved as {redirect_uri}, then paste the complete redirected address after login and vehicle consent.",
       "oauth_state_mismatch": "This URL belongs to a different or expired setup attempt. Keep one setup window open and use its newly generated authorization link.",
       "oauth_token_exchange_failed": "The provider rejected the authorization code. Verify the selected brand, Client ID, Client Secret, and exact redirect URI, then start again with a new code.",
       "required": "This field is required."

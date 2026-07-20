@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.4
+
+- Trimmed surrounding whitespace from developer credentials and redirect URIs.
+- Added field-level checks for blank credentials and sample placeholders.
+- Added a non-blocking confirmation for credentials that differ from commonly
+  observed Client ID and Client Secret formats.
+- Improved credential troubleshooting and synchronized English OAuth error
+  translations.
+
+## 0.2.3
+
+- Added specific, actionable errors for malformed OAuth redirects, provider
+  errors, state mismatches, missing codes, rejected token exchanges, and missing
+  refresh tokens.
+
 ## 0.2.2
 
 - Simplified the English and Korean documentation around HACS installation,

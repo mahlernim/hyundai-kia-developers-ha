@@ -84,6 +84,13 @@ https://example.com/redirect
   URL을 Home Assistant에 붙여 넣으세요.
 - **인증이 만료됨:** Home Assistant의 재인증 안내를 따르세요. Client ID,
   Client Secret 또는 리디렉션 URL이 바뀐 경우에만 **재구성**을 사용하세요.
+- **Client ID가 등록되지 않음:** 선택한 브랜드의 개발자 프로젝트에서 인증 정보를
+  다시 복사하고 **계정 API Redirect URL**이 `https://example.com/redirect`로
+  저장되어 있는지 확인하세요. 이 설정에 데이터 API Redirect URL이나 Callback
+  URL을 사용하면 안 됩니다. 예시 문구를 제거한 다음 새로 생성된 인증 링크를
+  사용하세요. 앞뒤 공백은 자동으로 제거됩니다. UUID 형식의 Client ID와 영문자 및
+  숫자로 이루어진 48자 Client Secret이 일반적이지만 다른 형식도 경고 확인 후
+  사용할 수 있습니다.
 - **오류 `4002`:** 인증 또는 토큰 갱신 중에는 재인증이 필요합니다. 차량 정보
   갱신 중에는 차량 요청이 잘못되었다는 뜻이며 계정 인증 만료를 의미하지는
   않습니다.
