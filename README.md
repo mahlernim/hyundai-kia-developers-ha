@@ -87,6 +87,11 @@ vehicle. Add a separate account for the other brand.
 - **Authorization expired:** Follow the reauthentication prompt from Home
   Assistant. Use **Reconfigure** only when the Client ID, Client Secret, or
   redirect URL has changed.
+- **Client ID is not registered:** Copy the credentials from the developer
+  project for the selected brand, remove sample placeholders, and start with a
+  newly generated authorization link. Surrounding whitespace is removed
+  automatically. A UUID-shaped Client ID and a 48-character alphanumeric Client
+  Secret are common, but the integration allows other formats after a warning.
 - **Error `4002`:** During authorization or token renewal it requires
   reauthorization. During a vehicle update it means that the vehicle request
   was invalid and does not by itself mean the account authorization expired.

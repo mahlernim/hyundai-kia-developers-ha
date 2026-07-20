@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import secrets
 from collections.abc import Mapping
 from typing import Any
@@ -59,6 +60,77 @@ from .exceptions import (
 )
 from .models import HyundaiKiaConfigEntry, TokenResponse, VehicleProfile
 from .util import parse_authorization_redirect, vehicle_key
+
+CLIENT_ID_PATTERN = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+    re.IGNORECASE,
+)
+CLIENT_SECRET_PATTERN = re.compile(r"[A-Za-z0-9]{48}", re.ASCII)
+CLIENT_ID_PLACEHOLDERS = frozenset(
+    {
+        "clientid",
+        "client_id",
+        "your_client_id",
+    }
+)
+CLIENT_SECRET_PLACEHOLDERS = frozenset(
+    {
+        "clientsecret",
+        "client_secret",
+        "your_client_secret",
+    }
+)
+
+
+def _is_placeholder(value: str, placeholders: frozenset[str]) -> bool:
+    """Return whether a value is a known sample with optional wrappers."""
+    return value.casefold().strip("{}<>\"'") in placeholders
+
+
+def _prepare_credentials(
+    user_input: Mapping[str, Any],
+    *,
+    existing_secret: str | None = None,
+) -> tuple[dict[str, Any], dict[str, str], bool]:
+    """Normalize credentials and return errors plus advisory-warning state."""
+    prepared = dict(user_input)
+    client_id = str(prepared.get(CONF_CLIENT_ID, "")).strip()
+    submitted_secret = str(prepared.get(CONF_CLIENT_SECRET, "")).strip()
+    redirect_uri = str(prepared.get(CONF_REDIRECT_URI, "")).strip()
+    secret_was_supplied = bool(submitted_secret)
+    client_secret = (
+        submitted_secret
+        if secret_was_supplied or existing_secret is None
+        else existing_secret
+    )
+    prepared.update(
+        {
+            CONF_CLIENT_ID: client_id,
+            CONF_CLIENT_SECRET: client_secret,
+            CONF_REDIRECT_URI: redirect_uri,
+        }
+    )
+
+    errors: dict[str, str] = {}
+    if not client_id:
+        errors[CONF_CLIENT_ID] = "required"
+    elif _is_placeholder(client_id, CLIENT_ID_PLACEHOLDERS):
+        errors[CONF_CLIENT_ID] = "invalid_client_id"
+
+    if existing_secret is None or secret_was_supplied:
+        if not client_secret:
+            errors[CONF_CLIENT_SECRET] = "required"
+        elif _is_placeholder(client_secret, CLIENT_SECRET_PLACEHOLDERS):
+            errors[CONF_CLIENT_SECRET] = "invalid_client_secret"
+
+    if not _valid_redirect_uri(redirect_uri):
+        errors[CONF_REDIRECT_URI] = "invalid_redirect_uri"
+
+    format_warning = not CLIENT_ID_PATTERN.fullmatch(client_id) or (
+        (existing_secret is None or secret_was_supplied)
+        and not CLIENT_SECRET_PATTERN.fullmatch(client_secret)
+    )
+    return prepared, errors, format_warning
 
 
 def _credentials_schema(
@@ -165,17 +237,30 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Collect brand and developer application credentials."""
         errors: dict[str, str] = {}
+        form_values: Mapping[str, Any] = self._pending
         if user_input is not None:
-            if not _valid_redirect_uri(str(user_input[CONF_REDIRECT_URI])):
-                errors[CONF_REDIRECT_URI] = "invalid_redirect_uri"
-            else:
+            prepared, errors, format_warning = _prepare_credentials(user_input)
+            form_values = prepared
+            if not errors:
                 self._flow_mode = "user"
-                self._pending = dict(user_input)
+                self._pending = prepared
+                if format_warning:
+                    return await self.async_step_credential_warning()
                 return await self._start_authorization()
         return self.async_show_form(
             step_id="user",
-            data_schema=_credentials_schema(user_input, include_brand=True),
+            data_schema=_credentials_schema(form_values, include_brand=True),
             errors=errors,
+        )
+
+    async def async_step_credential_warning(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Warn about unusual credential shapes without blocking setup."""
+        if user_input is not None:
+            return await self._start_authorization()
+        return self.async_show_form(
+            step_id="credential_warning", data_schema=vol.Schema({})
         )
 
     async def async_step_authorize(
@@ -338,25 +423,27 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
         """Update developer credentials without changing the brand."""
         entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
+        form_values: Mapping[str, Any] = self._pending or entry.data
         if user_input is not None:
-            if not _valid_redirect_uri(str(user_input[CONF_REDIRECT_URI])):
-                errors[CONF_REDIRECT_URI] = "invalid_redirect_uri"
-            else:
+            prepared, errors, format_warning = _prepare_credentials(
+                user_input,
+                existing_secret=str(entry.data[CONF_CLIENT_SECRET]),
+            )
+            form_values = prepared
+            if not errors:
                 self._target_entry = entry
                 self._flow_mode = "reconfigure"
                 self._pending = {
                     **dict(entry.data),
-                    **dict(user_input),
-                    CONF_CLIENT_SECRET: (
-                        str(user_input.get(CONF_CLIENT_SECRET, ""))
-                        or str(entry.data[CONF_CLIENT_SECRET])
-                    ),
+                    **prepared,
                 }
+                if format_warning:
+                    return await self.async_step_credential_warning()
                 return await self._start_authorization()
         return self.async_show_form(
             step_id="reconfigure",
             data_schema=_credentials_schema(
-                entry.data,
+                form_values,
                 include_brand=False,
                 require_secret=False,
             ),

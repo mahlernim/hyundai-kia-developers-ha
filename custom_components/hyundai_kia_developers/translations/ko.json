@@ -12,6 +12,10 @@
           "redirect_uri": "등록된 리디렉션 URI"
         }
       },
+      "credential_warning": {
+        "title": "개발자 인증 정보 형식 확인",
+        "description": "하나 이상의 인증 정보가 일반적으로 확인된 형식과 다릅니다. 클라이언트 ID는 UUID 형식이고 클라이언트 시크릿은 영문자와 숫자로 이루어진 48자 형식이 일반적입니다. 다른 형식도 유효할 수 있습니다. 이 정보로 계속하거나 뒤로 돌아가 다시 확인하세요."
+      },
       "authorize": {
         "title": "{brand} 인증",
         "description": "[인증 페이지]({authorization_url})를 열어 로그인한 다음 리디렉션된 전체 URL을 붙여 넣으세요. example.com 오류 화면은 정상이며 주소 표시줄의 URL을 복사하면 됩니다. 인증 코드는 한 번만 사용할 수 있고 저장되지 않습니다.",
@@ -78,6 +82,8 @@
     "error": {
       "cannot_connect": "차량 API에 연결할 수 없습니다.",
       "invalid_auth": "인증에 실패했습니다. 새 인증을 시작하고 새로 리디렉션된 URL을 붙여 넣으세요.",
+      "invalid_client_id": "예시 문구가 아닌 이 개발자 프로젝트에서 발급된 클라이언트 ID를 입력하세요.",
+      "invalid_client_secret": "예시 문구가 아닌 이 개발자 프로젝트에서 발급된 클라이언트 시크릿을 입력하세요.",
       "invalid_redirect_uri": "유효한 HTTPS 리디렉션 URI를 입력하세요.",
       "invalid_vehicle": "계정에서 필요한 차량 데이터를 읽을 수 없습니다.",
       "oauth_missing_code": "붙여 넣은 URL에 인증 코드가 없습니다. 로그인과 차량 접근 동의를 완료한 후 최종 https://example.com/redirect 주소를 붙여 넣으세요.",

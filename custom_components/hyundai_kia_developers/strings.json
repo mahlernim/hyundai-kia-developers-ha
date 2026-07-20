@@ -12,6 +12,10 @@
           "redirect_uri": "Registered redirect URI"
         }
       },
+      "credential_warning": {
+        "title": "Check developer credential format",
+        "description": "One or both credentials differ from the commonly observed formats. A UUID-shaped Client ID and a 48-character Client secret containing only ASCII letters and numbers are typical. Other formats may still be valid. Continue to use these credentials, or go back to check them."
+      },
       "authorize": {
         "title": "Authorize {brand}",
         "description": "Open the [authorization page]({authorization_url}), complete login, then paste the entire redirected URL. An error page at example.com is expected; copy its address-bar URL. Codes are single-use and are not stored.",
@@ -78,6 +82,8 @@
     "error": {
       "cannot_connect": "Unable to connect to the vehicle API.",
       "invalid_auth": "Authorization failed. Start again and paste a newly redirected URL.",
+      "invalid_client_id": "Enter the Client ID issued for this developer project, not a sample placeholder.",
+      "invalid_client_secret": "Enter the Client secret issued for this developer project, not a sample placeholder.",
       "invalid_redirect_uri": "Enter a valid HTTPS redirect URI.",
       "invalid_vehicle": "The account could not read the required vehicle data.",
       "oauth_missing_code": "The pasted URL has no authorization code. Complete login and vehicle consent, then paste the final https://example.com/redirect URL.",
