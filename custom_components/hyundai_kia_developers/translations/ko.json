@@ -80,6 +80,12 @@
       "invalid_auth": "인증에 실패했습니다. 새 인증을 시작하고 새로 리디렉션된 URL을 붙여 넣으세요.",
       "invalid_redirect_uri": "유효한 HTTPS 리디렉션 URI를 입력하세요.",
       "invalid_vehicle": "계정에서 필요한 차량 데이터를 읽을 수 없습니다.",
+      "oauth_missing_code": "붙여 넣은 URL에 인증 코드가 없습니다. 로그인과 차량 접근 동의를 완료한 후 최종 https://example.com/redirect 주소를 붙여 넣으세요.",
+      "oauth_missing_refresh_token": "인증 코드는 승인되었지만 갱신 토큰이 반환되지 않았습니다. 새 인증을 시작하세요.",
+      "oauth_provider_error": "인증 제공자가 오류를 반환했습니다. 새로 시작하여 커넥티드 카 계정으로 로그인하고 차량을 선택한 후 접근에 동의하세요.",
+      "oauth_redirect_mismatch": "등록된 리디렉션 URL이 아닙니다. 로그인과 차량 접근 동의 후 https://example.com/redirect로 시작하는 주소 전체를 붙여 넣으세요.",
+      "oauth_state_mismatch": "다른 인증 시도 또는 만료된 인증 시도의 URL입니다. 설정 창을 하나만 열고 그 창에서 새로 생성한 인증 링크를 사용하세요.",
+      "oauth_token_exchange_failed": "인증 제공자가 인증 코드를 거부했습니다. 선택한 브랜드, Client ID, Client Secret 및 정확한 리디렉션 URI를 확인한 후 새 코드로 다시 시작하세요.",
       "required": "필수 입력 항목입니다."
     },
     "abort": {
