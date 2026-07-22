@@ -1,5 +1,5 @@
 {
-  "title": "Hyundai Kia Developers",
+  "title": "Hyundai Kia Genesis Developers",
   "config": {
     "step": {
       "user": {
@@ -18,7 +18,7 @@
       },
       "authorize": {
         "title": "Authorize {brand}",
-        "description": "Before continuing, confirm that the developer console's Account API Redirect URL is saved as `{redirect_uri}`. Then open the [authorization page]({authorization_url}), complete login, and paste the entire redirected URL. An error page at example.com is expected; copy its address-bar URL. Codes are single-use and are not stored.",
+        "description": "Before continuing, confirm that the developer console's Account API Redirect URL is saved as `{redirect_uri}`. Also confirm that the Data API Redirect URL and Callback URL were saved with their separate Save buttons as described in the setup guide. Then open the [authorization page]({authorization_url}), complete login, and paste the entire redirected URL. An error page at example.com is expected; copy its address-bar URL. Codes are single-use and are not stored.",
         "data": {
           "redirect_url": "Redirected URL"
         }
@@ -246,10 +246,10 @@
   },
   "exceptions": {
     "cannot_connect": {
-      "message": "Unable to connect to the Hyundai/Kia developer API."
+      "message": "Unable to connect to the Hyundai, Kia, or Genesis developer API."
     },
     "invalid_auth": {
-      "message": "The Hyundai/Kia developer account needs to be reauthenticated."
+      "message": "The vehicle developer account needs to be reauthenticated."
     },
     "update_failed": {
       "message": "Unable to update any enabled vehicle endpoint."

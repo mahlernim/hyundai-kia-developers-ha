@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hyundai-kia-developers-ha"
-version = "0.2.5"
-description = "Home Assistant custom integration for Korean Hyundai and Kia developer APIs"
+version = "0.2.6"
+description = "Home Assistant custom integration for Korean Hyundai, Kia, and Genesis developer APIs"
 readme = "README.md"
 requires-python = ">=3.14"
 license = { text = "MIT" }

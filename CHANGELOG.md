@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.6
+
+- Added Korean Genesis Developers account, vehicle discovery, and vehicle data
+  support.
+- Added Genesis-specific authorization parameters, API hosts, and HTTP 200
+  token-error handling while retaining the shared Hyundai/Kia vehicle schema.
+- Made Korean the primary README and developer setup guide, with linked English
+  companion documents.
+- Expanded the shared Hyundai, Kia, and Genesis project registration guide with
+  step-by-step instructions and a screenshot of the three separate Save buttons.
+
 ## 0.2.5
 
 - Allowed vehicle setup to continue when the DTE or odometer endpoint reports
