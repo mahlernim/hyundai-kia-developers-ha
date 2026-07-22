@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.7
+
+- Accepted the Genesis OAuth success marker `result=0000` while continuing to
+  reject nonzero provider result codes.
+
 ## 0.2.6
 
 - Added Korean Genesis Developers account, vehicle discovery, and vehicle data

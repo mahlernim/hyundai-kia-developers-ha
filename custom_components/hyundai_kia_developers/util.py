@@ -28,7 +28,8 @@ def parse_authorization_redirect(
         raise HyundaiKiaOAuthRedirectError("oauth_redirect_mismatch")
 
     query = parse_qs(pasted.query, keep_blank_values=True)
-    if query.get("error") or query.get("result"):
+    result = query.get("result", [""])[0]
+    if query.get("error") or (result and result != "0000"):
         raise HyundaiKiaOAuthRedirectError("oauth_provider_error")
     state = query.get("state", [""])[0]
     if not state or not hmac.compare_digest(state, expected_state):

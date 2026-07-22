@@ -11,11 +11,21 @@ from custom_components.hyundai_kia_developers.util import (
 )
 
 
-def test_parse_authorization_redirect() -> None:
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://example.com/redirect?code=secret-code&state=expected",
+        (
+            "https://example.com/redirect?scope&state=expected"
+            "&code=secret-code&result=0000"
+        ),
+    ],
+)
+def test_parse_authorization_redirect(url: str) -> None:
     """A matching redirect returns only its one-time code."""
     assert (
         parse_authorization_redirect(
-            "https://example.com/redirect?code=secret-code&state=expected",
+            url,
             "https://example.com/redirect",
             "expected",
         )
