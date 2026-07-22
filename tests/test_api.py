@@ -1,4 +1,4 @@
-"""Tests for the Hyundai/Kia developer API client."""
+"""Tests for the Hyundai, Kia, and Genesis developer API client."""
 
 import asyncio
 from collections import defaultdict, deque
@@ -21,6 +21,7 @@ from custom_components.hyundai_kia_developers.const import (
 )
 from custom_components.hyundai_kia_developers.exceptions import (
     HyundaiKiaAuthenticationError,
+    HyundaiKiaConnectionError,
     HyundaiKiaVehicleError,
 )
 
@@ -71,15 +72,18 @@ class FakeSession:
 
 def make_api(session: FakeSession, brand: Brand = Brand.KIA) -> HyundaiKiaApiClient:
     """Create a client and queue its initial token refresh."""
+    token_payload = {
+        "access_token": "access-1",
+        "refresh_token": "refresh-2",
+        "expires_in": 3600,
+        "token_type": "Bearer",
+    }
+    if brand is Brand.GENESIS:
+        token_payload.update({"success": True, "code": "0000"})
     session.add(
         "POST",
         BRAND_ENDPOINTS[brand].token_url,
-        payload={
-            "access_token": "access-1",
-            "refresh_token": "refresh-2",
-            "expires_in": 3600,
-            "token_type": "Bearer",
-        },
+        payload=token_payload,
     )
     return HyundaiKiaApiClient(
         cast(ClientSession, session),
@@ -93,8 +97,8 @@ def make_api(session: FakeSession, brand: Brand = Brand.KIA) -> HyundaiKiaApiCli
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("brand", list(Brand))
-async def test_vehicle_discovery_for_both_brands(brand: Brand) -> None:
-    """Vehicle profiles parse identically for Hyundai and Kia."""
+async def test_vehicle_discovery_for_all_brands(brand: Brand) -> None:
+    """Vehicle profiles parse identically for every supported brand."""
     session = FakeSession()
     api = make_api(session, brand)
     session.add(
@@ -118,6 +122,41 @@ async def test_vehicle_discovery_for_both_brands(brand: Brand) -> None:
     assert vehicles[0].car_id == "car-1"
     assert vehicles[0].car_type == "HEV"
     assert vehicles[0].suggested_name == "Niro"
+
+
+def test_standard_authorization_url() -> None:
+    """Hyundai and Kia use the standard Korean developer OAuth request."""
+    session = FakeSession()
+    api = HyundaiKiaApiClient(
+        cast(ClientSession, session),
+        Brand.KIA,
+        "client-id",
+        "client-secret",
+        "https://example.com/redirect",
+    )
+
+    assert api.authorization_url("oauth-state") == (
+        "https://prd.kr-ccapi.kia.com/api/v1/user/oauth2/authorize"
+        "?response_type=code&client_id=client-id"
+        "&redirect_uri=https%3A%2F%2Fexample.com%2Fredirect&state=oauth-state"
+    )
+
+
+def test_genesis_authorization_url_uses_redirect_origin() -> None:
+    """Genesis uses clientId and the registered redirect origin as host."""
+    session = FakeSession()
+    api = HyundaiKiaApiClient(
+        cast(ClientSession, session),
+        Brand.GENESIS,
+        "client-id",
+        "client-secret",
+        "https://example.com/redirect",
+    )
+
+    assert api.authorization_url("oauth-state") == (
+        "https://accounts.genesis.com/api/authorize/ccsp/oauth"
+        "?clientId=client-id&host=https%3A%2F%2Fexample.com&state=oauth-state"
+    )
 
 
 @pytest.mark.asyncio
@@ -286,6 +325,58 @@ async def test_error_4002_requests_reauthentication() -> None:
     )
 
     with pytest.raises(HyundaiKiaAuthenticationError):
+        await api.async_ensure_access_token()
+
+
+@pytest.mark.asyncio
+async def test_genesis_http_200_token_rejection_requests_reauthentication() -> None:
+    """Genesis reports invalid credentials in an HTTP 200 response body."""
+    session = FakeSession()
+    session.add(
+        "POST",
+        BRAND_ENDPOINTS[Brand.GENESIS].token_url,
+        payload={
+            "success": False,
+            "code": "9002",
+            "message": "Invalid access",
+        },
+    )
+    api = HyundaiKiaApiClient(
+        cast(ClientSession, session),
+        Brand.GENESIS,
+        "client-id",
+        "client-secret",
+        "https://example.com/redirect",
+        "expired-refresh-token",
+    )
+
+    with pytest.raises(HyundaiKiaAuthenticationError):
+        await api.async_ensure_access_token()
+
+
+@pytest.mark.asyncio
+async def test_genesis_http_200_internal_token_failure_is_connection_error() -> None:
+    """Genesis internal token failures remain retryable connection errors."""
+    session = FakeSession()
+    session.add(
+        "POST",
+        BRAND_ENDPOINTS[Brand.GENESIS].token_url,
+        payload={
+            "success": False,
+            "code": "1299",
+            "message": "Request failed",
+        },
+    )
+    api = HyundaiKiaApiClient(
+        cast(ClientSession, session),
+        Brand.GENESIS,
+        "client-id",
+        "client-secret",
+        "https://example.com/redirect",
+        "refresh-token",
+    )
+
+    with pytest.raises(HyundaiKiaConnectionError):
         await api.async_ensure_access_token()
 
 

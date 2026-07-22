@@ -7,7 +7,7 @@ import json
 import time
 from collections.abc import Callable
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from aiohttp import ClientError, ClientResponse, ClientSession, encode_basic_auth
 
@@ -15,6 +15,7 @@ from .const import (
     BRAND_ENDPOINTS,
     REQUEST_TIMEOUT_SECONDS,
     TOKEN_REFRESH_MARGIN_SECONDS,
+    AuthorizationStyle,
     Brand,
     EndpointKey,
     EntityKey,
@@ -74,6 +75,7 @@ TIME_TO_MINUTES = {
 CHARGER_TYPES = {0: "not_connected", 1: "fast", 2: "normal"}
 VEHICLE_AUTH_ERROR_CODES = {"4011", "4012", "4016"}
 VEHICLE_NO_DATA_ERROR_CODE = "4045"
+GENESIS_TOKEN_AUTH_ERROR_CODES = {"1211", "9001", "9002"}
 
 
 class HyundaiKiaApiClient:
@@ -108,15 +110,26 @@ class HyundaiKiaApiClient:
 
     def authorization_url(self, state: str) -> str:
         """Build the interactive OAuth authorization URL."""
-        query = urlencode(
-            {
-                "response_type": "code",
-                "client_id": self._client_id,
-                "redirect_uri": self.redirect_uri,
-                "state": state,
-            }
-        )
-        return f"{BRAND_ENDPOINTS[self.brand].authorize_url}?{query}"
+        endpoints = BRAND_ENDPOINTS[self.brand]
+        if endpoints.authorization_style is AuthorizationStyle.GENESIS:
+            redirect = urlsplit(self.redirect_uri)
+            query = urlencode(
+                {
+                    "clientId": self._client_id,
+                    "host": f"{redirect.scheme}://{redirect.netloc}",
+                    "state": state,
+                }
+            )
+        else:
+            query = urlencode(
+                {
+                    "response_type": "code",
+                    "client_id": self._client_id,
+                    "redirect_uri": self.redirect_uri,
+                    "state": state,
+                }
+            )
+        return f"{endpoints.authorize_url}?{query}"
 
     async def async_exchange_authorization_code(self, code: str) -> TokenResponse:
         """Exchange a one-time authorization code and activate the token set."""
@@ -244,7 +257,17 @@ class HyundaiKiaApiClient:
             raise HyundaiKiaConnectionError("OAuth token request failed") from err
 
         payload = await self._async_json(response)
-        error_code = self._error_code(payload)
+        error_code = self._token_error_code(payload)
+        if self.brand is Brand.GENESIS and (
+            payload.get("success") is False or error_code not in {"0000", "unknown"}
+        ):
+            if error_code in GENESIS_TOKEN_AUTH_ERROR_CODES:
+                raise HyundaiKiaAuthenticationError(
+                    f"OAuth token request was rejected ({error_code})"
+                )
+            raise HyundaiKiaConnectionError(
+                f"OAuth token request failed ({error_code})"
+            )
         if response.status >= 400:
             if response.status in (400, 401, 403) or error_code == "4002":
                 raise HyundaiKiaAuthenticationError(
@@ -324,6 +347,12 @@ class HyundaiKiaApiClient:
                 payload.get("resCode", payload.get("error", "unknown")),
             )
         )
+
+    def _token_error_code(self, payload: dict[str, Any]) -> str:
+        """Return the provider error code for an OAuth token response."""
+        if self.brand is Brand.GENESIS and payload.get("code") is not None:
+            return str(payload["code"])
+        return self._error_code(payload)
 
     @staticmethod
     def _raise_for_api_error(status: int, error_code: str, operation: str) -> None:
