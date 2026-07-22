@@ -36,6 +36,14 @@ class Brand(StrEnum):
 
     HYUNDAI = "hyundai"
     KIA = "kia"
+    GENESIS = "genesis"
+
+
+class AuthorizationStyle(StrEnum):
+    """Brand-specific OAuth authorization request styles."""
+
+    STANDARD = "standard"
+    GENESIS = "genesis"
 
 
 class VehicleType(StrEnum):
@@ -123,27 +131,27 @@ EV_DEFAULT_ENTITY_KEYS = frozenset({EntityKey.EV_BATTERY_LEVEL, EntityKey.CHARGI
 class BrandEndpoints:
     """API endpoints for a vehicle brand."""
 
-    auth_base: str
+    authorize_url: str
+    token_url: str
     vehicle_base: str
-
-    @property
-    def authorize_url(self) -> str:
-        """Return the authorization URL."""
-        return f"{self.auth_base}/api/v1/user/oauth2/authorize"
-
-    @property
-    def token_url(self) -> str:
-        """Return the token URL."""
-        return f"{self.auth_base}/api/v1/user/oauth2/token"
+    authorization_style: AuthorizationStyle = AuthorizationStyle.STANDARD
 
 
 BRAND_ENDPOINTS: dict[Brand, BrandEndpoints] = {
     Brand.HYUNDAI: BrandEndpoints(
-        auth_base="https://prd.kr-ccapi.hyundai.com",
+        authorize_url=("https://prd.kr-ccapi.hyundai.com/api/v1/user/oauth2/authorize"),
+        token_url="https://prd.kr-ccapi.hyundai.com/api/v1/user/oauth2/token",
         vehicle_base="https://dev.kr-ccapi.hyundai.com",
     ),
     Brand.KIA: BrandEndpoints(
-        auth_base="https://prd.kr-ccapi.kia.com",
+        authorize_url="https://prd.kr-ccapi.kia.com/api/v1/user/oauth2/authorize",
+        token_url="https://prd.kr-ccapi.kia.com/api/v1/user/oauth2/token",
         vehicle_base="https://dev.kr-ccapi.kia.com",
+    ),
+    Brand.GENESIS: BrandEndpoints(
+        authorize_url="https://accounts.genesis.com/api/authorize/ccsp/oauth",
+        token_url=("https://accounts.genesis.com/api/account/ccsp/user/oauth2/token"),
+        vehicle_base="https://dev-kr-ccapi.genesis.com:8081",
+        authorization_style=AuthorizationStyle.GENESIS,
     ),
 }

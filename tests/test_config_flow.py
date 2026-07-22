@@ -295,6 +295,7 @@ def test_account_titles_are_generated_per_brand() -> None:
     ]
     assert _next_account_title(hass, Brand.KIA) == "Kia 2"
     assert _next_account_title(hass, Brand.HYUNDAI) == "Hyundai 2"
+    assert _next_account_title(hass, Brand.GENESIS) == "Genesis"
 
 
 def test_reconfigure_schema_cannot_change_brand() -> None:

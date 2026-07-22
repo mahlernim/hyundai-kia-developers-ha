@@ -42,6 +42,10 @@ def test_parse_authorization_redirect() -> None:
             "https://example.com/redirect?error=access_denied&state=expected",
             "oauth_provider_error",
         ),
+        (
+            "https://example.com/redirect?result=9001&message=invalid",
+            "oauth_provider_error",
+        ),
     ],
 )
 def test_parse_authorization_redirect_rejects_invalid_input(
