@@ -219,6 +219,7 @@
       "distance_to_empty": { "name": "주행 가능 거리" },
       "odometer": { "name": "누적 주행 거리" },
       "combined_distance_to_empty": { "name": "통합 주행 가능 거리" },
+      "connected_service_free_days_remaining": { "name": "커넥티드 서비스 무료 기간 남은 일수" },
       "ev_battery_level": { "name": "전기차 배터리 잔량" },
       "charger_type": {
         "name": "충전기 종류",
@@ -231,6 +232,9 @@
       },
       "target_state_of_charge": { "name": "목표 충전량" },
       "remaining_charging_time": { "name": "남은 충전 시간" }
+    },
+    "button": {
+      "refresh_vehicle_data": { "name": "차량 데이터 새로고침" }
     },
     "binary_sensor": {
       "charging": { "name": "충전 중" },

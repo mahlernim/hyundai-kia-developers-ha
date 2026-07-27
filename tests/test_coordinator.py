@@ -27,6 +27,28 @@ def test_default_context_includes_combined_warning() -> None:
     assert EntityKey.VEHICLE_WARNING in DEFAULT_ENTITY_KEYS
 
 
+def test_default_context_includes_connected_service_contract() -> None:
+    """The initial refresh includes the enabled contract sensor."""
+    key = EntityKey.CONNECTED_SERVICE_FREE_DAYS_REMAINING
+
+    assert key in DEFAULT_ENTITY_KEYS
+    assert endpoint_jobs({("vehicle-1", key)}) == {
+        ("vehicle-1", ENTITY_ENDPOINT[key]): {key}
+    }
+
+
+def test_contract_jobs_are_distinct_for_each_vehicle() -> None:
+    """Each enabled vehicle receives one contract request per refresh."""
+    key = EntityKey.CONNECTED_SERVICE_FREE_DAYS_REMAINING
+
+    jobs = endpoint_jobs({("vehicle-1", key), ("vehicle-2", key)})
+
+    assert set(jobs) == {
+        ("vehicle-1", ENTITY_ENDPOINT[key]),
+        ("vehicle-2", ENTITY_ENDPOINT[key]),
+    }
+
+
 def test_combined_warning_expands_to_all_warning_endpoints() -> None:
     """One combined context schedules every warning endpoint."""
     jobs = endpoint_jobs({("vehicle-1", EntityKey.VEHICLE_WARNING)})

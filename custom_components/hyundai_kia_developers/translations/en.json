@@ -219,6 +219,7 @@
       "distance_to_empty": { "name": "Distance to empty" },
       "odometer": { "name": "Odometer" },
       "combined_distance_to_empty": { "name": "Combined distance to empty" },
+      "connected_service_free_days_remaining": { "name": "Connected service free days remaining" },
       "ev_battery_level": { "name": "EV battery level" },
       "charger_type": {
         "name": "Charger type",
@@ -231,6 +232,9 @@
       },
       "target_state_of_charge": { "name": "Target state of charge" },
       "remaining_charging_time": { "name": "Remaining charging time" }
+    },
+    "button": {
+      "refresh_vehicle_data": { "name": "Refresh vehicle data" }
     },
     "binary_sensor": {
       "charging": { "name": "Charging" },

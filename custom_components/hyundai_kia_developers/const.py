@@ -6,7 +6,7 @@ from enum import StrEnum
 from homeassistant.const import Platform
 
 DOMAIN = "hyundai_kia_developers"
-PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR]
+PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON]
 
 CONF_ACCOUNT_ID = "account_id"
 CONF_BRAND = "brand"
@@ -66,6 +66,7 @@ class EndpointKey(StrEnum):
     ODOMETER = "odometer"
     EV_BATTERY = "ev_battery"
     EV_CHARGING = "ev_charging"
+    CONNECTED_SERVICE_CONTRACT = "connected_service_contract"
     LOW_FUEL_WARNING = "low_fuel_warning"
     TIRE_PRESSURE_WARNING = "tire_pressure_warning"
     LAMP_WIRE_WARNING = "lamp_wire_warning"
@@ -87,6 +88,7 @@ class EntityKey(StrEnum):
     CHARGER_TYPE = "charger_type"
     TARGET_STATE_OF_CHARGE = "target_state_of_charge"
     REMAINING_CHARGING_TIME = "remaining_charging_time"
+    CONNECTED_SERVICE_FREE_DAYS_REMAINING = "connected_service_free_days_remaining"
     VEHICLE_WARNING = "vehicle_warning"
     LOW_FUEL_WARNING = "low_fuel_warning"
     TIRE_PRESSURE_WARNING = "tire_pressure_warning"
@@ -107,6 +109,9 @@ ENTITY_ENDPOINT: dict[EntityKey, EndpointKey] = {
     EntityKey.CHARGER_TYPE: EndpointKey.EV_CHARGING,
     EntityKey.TARGET_STATE_OF_CHARGE: EndpointKey.EV_CHARGING,
     EntityKey.REMAINING_CHARGING_TIME: EndpointKey.EV_CHARGING,
+    EntityKey.CONNECTED_SERVICE_FREE_DAYS_REMAINING: (
+        EndpointKey.CONNECTED_SERVICE_CONTRACT
+    ),
     EntityKey.LOW_FUEL_WARNING: EndpointKey.LOW_FUEL_WARNING,
     EntityKey.TIRE_PRESSURE_WARNING: EndpointKey.TIRE_PRESSURE_WARNING,
     EntityKey.LAMP_WIRE_WARNING: EndpointKey.LAMP_WIRE_WARNING,
@@ -135,7 +140,10 @@ WARNING_ENTITY_KEYS: tuple[EntityKey, ...] = (
 )
 
 CORE_ENTITY_KEYS = frozenset({EntityKey.DISTANCE_TO_EMPTY, EntityKey.ODOMETER})
-DEFAULT_ENTITY_KEYS = CORE_ENTITY_KEYS | {EntityKey.VEHICLE_WARNING}
+DEFAULT_ENTITY_KEYS = CORE_ENTITY_KEYS | {
+    EntityKey.CONNECTED_SERVICE_FREE_DAYS_REMAINING,
+    EntityKey.VEHICLE_WARNING,
+}
 EV_DEFAULT_ENTITY_KEYS = frozenset({EntityKey.EV_BATTERY_LEVEL, EntityKey.CHARGING})
 
 

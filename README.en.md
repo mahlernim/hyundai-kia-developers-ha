@@ -68,11 +68,13 @@ in logs, screenshots, messages, or issues.
 | --- | --- | --- |
 | Distance to empty | All vehicles | Enabled |
 | Odometer | All vehicles | Enabled |
+| Connected service free days remaining | When the API supplies a free-service end date | Enabled |
 | EV battery level and charging | EV and PHEV | Enabled |
 | Combined distance to empty | PHEV, when supplied by the API | Enabled |
 | Charging cable, charger type, charge target, and remaining charging time | EV and PHEV | Disabled |
 | Combined vehicle warning | All vehicles | Enabled |
 | Individual fuel, tire, lamp, smart-key battery, washer-fluid, brake-fluid, and engine-oil warnings | When supplied by the vehicle | Disabled |
+| Refresh vehicle data | Each configured account | Enabled |
 
 Disabled entities can be enabled from the vehicle's Home Assistant device
 page. Vehicle data is refreshed every 60 minutes by default. The integration
@@ -85,6 +87,18 @@ Polling it requires seven API requests per vehicle during each refresh. Enabling
 individual warning entities reuses those requests. If an individual warning
 request fails, the combined sensor continues using the available results and
 lists the failed identifier in `unavailable_warnings`.
+
+The connected-service sensor counts down to the free-service end date supplied
+by the provider. Its `subscription_date`, `free_service_end_date`, and `expired`
+attributes use stable names suitable for automations. The state remains zero
+after the date has passed. The sensor is unavailable when the API does not
+supply a valid free-service end date. Polling it adds one API request per
+enabled vehicle during each refresh.
+
+The account-level **Refresh vehicle data** button requests an immediate update
+of every currently enabled endpoint for all vehicles in that account. Each
+press therefore repeats the API requests that would run during a scheduled
+refresh.
 
 ## Accounts and vehicles
 

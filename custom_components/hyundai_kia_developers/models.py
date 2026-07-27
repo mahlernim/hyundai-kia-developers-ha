@@ -1,5 +1,6 @@
 """Data models for Hyundai Kia Developers."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -38,7 +39,7 @@ class VehicleProfile:
         return self.nickname or self.sales_model or self.model_code or "Vehicle"
 
 
-type VehicleStateValue = float | bool | str
+type VehicleStateValue = float | int | bool | str
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +48,7 @@ class EntityValue:
 
     value: VehicleStateValue
     timestamp: str | None = None
+    attributes: Mapping[str, VehicleStateValue] | None = None
 
 
 @dataclass(frozen=True, slots=True)

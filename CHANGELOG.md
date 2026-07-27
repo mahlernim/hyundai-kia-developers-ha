@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.8
+
+- Accepted successful warning responses with documented Boolean states or a
+  message identifier when no warning is active.
+- Added an enabled combined vehicle warning with stable active and unavailable
+  warning attributes.
+- Added an enabled connected-service free-days sensor with contract date and
+  expiration attributes when the provider supplies a free-service end date.
+- Added an account-level button for immediately refreshing all enabled vehicle
+  data.
+
 ## 0.2.7
 
 - Accepted the Genesis OAuth success marker `result=0000` while continuing to

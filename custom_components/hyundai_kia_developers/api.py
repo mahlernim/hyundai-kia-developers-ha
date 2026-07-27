@@ -6,10 +6,12 @@ import asyncio
 import json
 import time
 from collections.abc import Callable
+from datetime import date, datetime
 from typing import Any
 from urllib.parse import urlencode, urlsplit
 
 from aiohttp import ClientError, ClientResponse, ClientSession, encode_basic_auth
+from homeassistant.util import dt as dt_util
 
 from .const import (
     BRAND_ENDPOINTS,
@@ -35,6 +37,7 @@ ENDPOINT_PATHS: dict[EndpointKey, str] = {
     EndpointKey.ODOMETER: "/api/v1/car/status/{car_id}/odometer",
     EndpointKey.EV_BATTERY: "/api/v1/car/status/{car_id}/ev/battery",
     EndpointKey.EV_CHARGING: "/api/v1/car/status/{car_id}/ev/charging",
+    EndpointKey.CONNECTED_SERVICE_CONTRACT: "/api/v1/car/profile/{car_id}/contract",
     EndpointKey.LOW_FUEL_WARNING: "/api/v1/car/status/warning/{car_id}/lowFuel",
     EndpointKey.TIRE_PRESSURE_WARNING: (
         "/api/v1/car/status/warning/{car_id}/tirePressure"
@@ -463,6 +466,24 @@ class HyundaiKiaApiClient:
                     )
                 return values
 
+            if endpoint is EndpointKey.CONNECTED_SERVICE_CONTRACT:
+                end_date_value = payload.get("endDate")
+                if end_date_value is None:
+                    return {}
+                subscription_date = cls._contract_date(payload["subscribeDate"])
+                end_date = cls._contract_date(end_date_value)
+                today = dt_util.now().date()
+                return {
+                    EntityKey.CONNECTED_SERVICE_FREE_DAYS_REMAINING: EntityValue(
+                        max((end_date - today).days, 0),
+                        attributes={
+                            "subscription_date": subscription_date.isoformat(),
+                            "free_service_end_date": end_date.isoformat(),
+                            "expired": end_date < today,
+                        },
+                    )
+                }
+
             entity_key = WARNING_ENTITY_KEYS[endpoint]
             if "status" in payload:
                 status = payload["status"]
@@ -487,3 +508,10 @@ class HyundaiKiaApiClient:
     def _timestamp(payload: dict[str, Any]) -> str | None:
         """Return an optional vehicle timestamp."""
         return str(payload.get("timestamp", "")) or None
+
+    @staticmethod
+    def _contract_date(value: Any) -> date:
+        """Parse one provider contract date in YYYYMMDD format."""
+        if not isinstance(value, str) or len(value) != 8 or not value.isdigit():
+            raise ValueError
+        return datetime.strptime(value, "%Y%m%d").date()
