@@ -235,6 +235,7 @@
     "binary_sensor": {
       "charging": { "name": "Charging" },
       "charging_cable_connected": { "name": "Charging cable connected" },
+      "vehicle_warning": { "name": "Vehicle warning" },
       "low_fuel_warning": { "name": "Low fuel warning" },
       "tire_pressure_warning": { "name": "Tire pressure warning" },
       "lamp_wire_warning": { "name": "Lamp wire warning" },

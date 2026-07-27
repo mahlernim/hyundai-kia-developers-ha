@@ -464,7 +464,15 @@ class HyundaiKiaApiClient:
                 return values
 
             entity_key = WARNING_ENTITY_KEYS[endpoint]
-            return {entity_key: EntityValue(bool(payload["status"]))}
+            if "status" in payload:
+                status = payload["status"]
+                if not isinstance(status, bool):
+                    raise ValueError
+                return {entity_key: EntityValue(status)}
+            msg_id = payload.get("msgId")
+            if isinstance(msg_id, str) and msg_id.strip():
+                return {entity_key: EntityValue(False)}
+            raise ValueError
         except (KeyError, TypeError, ValueError, IndexError) as err:
             raise HyundaiKiaVehicleError(
                 f"Vehicle API returned invalid {endpoint.value} data"

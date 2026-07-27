@@ -18,7 +18,7 @@ from .const import (
     SUBENTRY_TYPE_VEHICLE,
     EntityKey,
 )
-from .coordinator import HyundaiKiaDataUpdateCoordinator
+from .coordinator import HyundaiKiaDataUpdateCoordinator, warning_summary
 from .entity import HyundaiKiaVehicleEntity
 from .models import HyundaiKiaConfigEntry
 
@@ -40,6 +40,12 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[HyundaiKiaBinarySensorEntityDescription, ...] 
         translation_key=EntityKey.CHARGING,
         device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
         applicable_types=EV_VEHICLE_TYPES,
+    ),
+    HyundaiKiaBinarySensorEntityDescription(
+        key=EntityKey.VEHICLE_WARNING,
+        entity_key=EntityKey.VEHICLE_WARNING,
+        translation_key=EntityKey.VEHICLE_WARNING,
+        device_class=BinarySensorDeviceClass.PROBLEM,
     ),
     HyundaiKiaBinarySensorEntityDescription(
         key=EntityKey.CHARGING_CABLE_CONNECTED,
@@ -136,3 +142,16 @@ class HyundaiKiaBinarySensor(HyundaiKiaVehicleEntity, BinarySensorEntity):
         if not result or not result.value:
             return None
         return bool(result.value.value)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object] | None:
+        """Return combined warning details."""
+        if self._entity_key is not EntityKey.VEHICLE_WARNING:
+            return None
+        results = self.coordinator.data.get(self._subentry_id, {})
+        active, unavailable = warning_summary(results)
+        return {
+            "warning_count": len(active),
+            "active_warnings": list(active),
+            "unavailable_warnings": list(unavailable),
+        }

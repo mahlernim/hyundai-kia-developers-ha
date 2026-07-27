@@ -87,6 +87,7 @@ class EntityKey(StrEnum):
     CHARGER_TYPE = "charger_type"
     TARGET_STATE_OF_CHARGE = "target_state_of_charge"
     REMAINING_CHARGING_TIME = "remaining_charging_time"
+    VEHICLE_WARNING = "vehicle_warning"
     LOW_FUEL_WARNING = "low_fuel_warning"
     TIRE_PRESSURE_WARNING = "tire_pressure_warning"
     LAMP_WIRE_WARNING = "lamp_wire_warning"
@@ -123,7 +124,18 @@ ENDPOINT_ENTITIES: dict[EndpointKey, frozenset[EntityKey]] = {
     for endpoint in EndpointKey
 }
 
+WARNING_ENTITY_KEYS: tuple[EntityKey, ...] = (
+    EntityKey.LOW_FUEL_WARNING,
+    EntityKey.TIRE_PRESSURE_WARNING,
+    EntityKey.LAMP_WIRE_WARNING,
+    EntityKey.SMART_KEY_BATTERY_WARNING,
+    EntityKey.WASHER_FLUID_WARNING,
+    EntityKey.BRAKE_FLUID_WARNING,
+    EntityKey.ENGINE_OIL_WARNING,
+)
+
 CORE_ENTITY_KEYS = frozenset({EntityKey.DISTANCE_TO_EMPTY, EntityKey.ODOMETER})
+DEFAULT_ENTITY_KEYS = CORE_ENTITY_KEYS | {EntityKey.VEHICLE_WARNING}
 EV_DEFAULT_ENTITY_KEYS = frozenset({EntityKey.EV_BATTERY_LEVEL, EntityKey.CHARGING})
 
 

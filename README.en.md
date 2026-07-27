@@ -71,11 +71,20 @@ in logs, screenshots, messages, or issues.
 | EV battery level and charging | EV and PHEV | Enabled |
 | Combined distance to empty | PHEV, when supplied by the API | Enabled |
 | Charging cable, charger type, charge target, and remaining charging time | EV and PHEV | Disabled |
-| Fuel, tire, lamp, smart-key battery, washer-fluid, brake-fluid, and engine-oil warnings | When supplied by the vehicle | Disabled |
+| Combined vehicle warning | All vehicles | Enabled |
+| Individual fuel, tire, lamp, smart-key battery, washer-fluid, brake-fluid, and engine-oil warnings | When supplied by the vehicle | Disabled |
 
 Disabled entities can be enabled from the vehicle's Home Assistant device
 page. Vehicle data is refreshed every 60 minutes by default. The integration
 options allow an interval from 30 to 1440 minutes.
+
+The combined vehicle warning is on when any available warning endpoint reports
+a problem. Its `warning_count`, `active_warnings`, and `unavailable_warnings`
+attributes provide details using stable identifiers suitable for automations.
+Polling it requires seven API requests per vehicle during each refresh. Enabling
+individual warning entities reuses those requests. If an individual warning
+request fails, the combined sensor continues using the available results and
+lists the failed identifier in `unavailable_warnings`.
 
 ## Accounts and vehicles
 

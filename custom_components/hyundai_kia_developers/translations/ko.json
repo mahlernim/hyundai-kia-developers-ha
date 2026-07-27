@@ -235,6 +235,7 @@
     "binary_sensor": {
       "charging": { "name": "충전 중" },
       "charging_cable_connected": { "name": "충전 케이블 연결" },
+      "vehicle_warning": { "name": "차량 경고" },
       "low_fuel_warning": { "name": "연료 부족 경고" },
       "tire_pressure_warning": { "name": "타이어 공기압 경고" },
       "lamp_wire_warning": { "name": "램프 배선 경고" },

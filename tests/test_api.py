@@ -280,9 +280,40 @@ def test_phev_dte_and_charging_fan_out() -> None:
     ],
 )
 def test_warning_payloads(endpoint: EndpointKey, key: EntityKey) -> None:
-    """Every documented warning endpoint maps true to a problem state."""
-    values = HyundaiKiaApiClient._parse_endpoint(endpoint, {"status": True})
-    assert values[key].value is True
+    """Every warning endpoint accepts documented and message-only responses."""
+    assert (
+        HyundaiKiaApiClient._parse_endpoint(endpoint, {"status": True})[key].value
+        is True
+    )
+    assert (
+        HyundaiKiaApiClient._parse_endpoint(endpoint, {"status": False})[key].value
+        is False
+    )
+    assert (
+        HyundaiKiaApiClient._parse_endpoint(
+            endpoint, {"msgId": "synthetic-message-id"}
+        )[key].value
+        is False
+    )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    (
+        {},
+        {"msgId": ""},
+        {"msgId": "   "},
+        {"msgId": None},
+        {"msgId": 123},
+        {"status": 0},
+        {"status": 1},
+        {"status": "false"},
+    ),
+)
+def test_invalid_warning_payloads_are_rejected(payload: dict[str, Any]) -> None:
+    """Malformed warning data must not silently report a normal vehicle."""
+    with pytest.raises(HyundaiKiaVehicleError):
+        HyundaiKiaApiClient._parse_endpoint(EndpointKey.LOW_FUEL_WARNING, payload)
 
 
 @pytest.mark.parametrize(("unit", "factor"), list(DISTANCE_TO_KM.items()))
