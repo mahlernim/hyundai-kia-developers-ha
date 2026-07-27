@@ -69,6 +69,14 @@ SENSOR_DESCRIPTIONS: tuple[HyundaiKiaSensorEntityDescription, ...] = (
         requires_initial_value=True,
     ),
     HyundaiKiaSensorEntityDescription(
+        key=EntityKey.CONNECTED_SERVICE_FREE_DAYS_REMAINING,
+        entity_key=EntityKey.CONNECTED_SERVICE_FREE_DAYS_REMAINING,
+        translation_key=EntityKey.CONNECTED_SERVICE_FREE_DAYS_REMAINING,
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.DAYS,
+        suggested_display_precision=0,
+    ),
+    HyundaiKiaSensorEntityDescription(
         key=EntityKey.EV_BATTERY_LEVEL,
         entity_key=EntityKey.EV_BATTERY_LEVEL,
         translation_key=EntityKey.EV_BATTERY_LEVEL,
@@ -183,3 +191,11 @@ class HyundaiKiaSensor(HyundaiKiaVehicleEntity, SensorEntity):
         """Return the native sensor value."""
         result = self.entity_result
         return result.value.value if result and result.value else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, StateType] | None:
+        """Return stable provider contract attributes when available."""
+        result = self.entity_result
+        if not result or not result.value or not result.value.attributes:
+            return None
+        return dict(result.value.attributes)

@@ -2,11 +2,13 @@
 
 import asyncio
 from collections import defaultdict, deque
+from datetime import datetime
 from typing import Any, cast
 
 import pytest
 from aiohttp import ClientSession
 
+from custom_components.hyundai_kia_developers import api as api_module
 from custom_components.hyundai_kia_developers.api import (
     DISTANCE_TO_KM,
     ENDPOINT_PATHS,
@@ -122,6 +124,105 @@ async def test_vehicle_discovery_for_all_brands(brand: Brand) -> None:
     assert vehicles[0].car_id == "car-1"
     assert vehicles[0].car_type == "HEV"
     assert vehicles[0].suggested_name == "Niro"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("brand", list(Brand))
+async def test_contract_endpoint_for_all_brands(
+    brand: Brand, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Contract dates parse identically from each brand-specific API host."""
+    monkeypatch.setattr(
+        api_module.dt_util,
+        "now",
+        lambda: datetime(2026, 7, 27, 12, 0, 0),
+    )
+    session = FakeSession()
+    api = make_api(session, brand)
+    url = (
+        f"{BRAND_ENDPOINTS[brand].vehicle_base}"
+        f"{ENDPOINT_PATHS[EndpointKey.CONNECTED_SERVICE_CONTRACT].format(car_id='car-1')}"
+    )
+    session.add(
+        "GET",
+        url,
+        payload={
+            "subscribeDate": "20240115",
+            "endDate": "20260801",
+            "msgId": "success",
+        },
+    )
+
+    values = await api.async_get_endpoint(
+        "car-1", EndpointKey.CONNECTED_SERVICE_CONTRACT
+    )
+
+    value = values[EntityKey.CONNECTED_SERVICE_FREE_DAYS_REMAINING]
+    assert value.value == 5
+    assert value.attributes == {
+        "subscription_date": "2024-01-15",
+        "free_service_end_date": "2026-08-01",
+        "expired": False,
+    }
+    assert ("GET", url) in [
+        (method, request_url) for method, request_url, _ in session.requests
+    ]
+
+
+@pytest.mark.parametrize(
+    ("end_date", "days", "expired"),
+    (("20260727", 0, False), ("20260726", 0, True)),
+)
+def test_contract_expiration_boundaries(
+    end_date: str,
+    days: int,
+    expired: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The free period expires only after its documented end date."""
+    monkeypatch.setattr(
+        api_module.dt_util,
+        "now",
+        lambda: datetime(2026, 7, 27, 12, 0, 0),
+    )
+
+    values = HyundaiKiaApiClient._parse_endpoint(
+        EndpointKey.CONNECTED_SERVICE_CONTRACT,
+        {"subscribeDate": "20240115", "endDate": end_date},
+    )
+
+    value = values[EntityKey.CONNECTED_SERVICE_FREE_DAYS_REMAINING]
+    assert value.value == days
+    assert value.attributes["expired"] is expired
+
+
+def test_contract_without_end_date_is_unavailable() -> None:
+    """An optional missing free-service end date produces no sensor value."""
+    assert (
+        HyundaiKiaApiClient._parse_endpoint(
+            EndpointKey.CONNECTED_SERVICE_CONTRACT,
+            {"subscribeDate": "20240115", "msgId": "success"},
+        )
+        == {}
+    )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    (
+        {"subscribeDate": "20240115", "endDate": 20260801},
+        {"subscribeDate": "20240115", "endDate": "2026-08-01"},
+        {"subscribeDate": "20240115", "endDate": "20260230"},
+        {"endDate": "20260801"},
+        {"subscribeDate": 20240115, "endDate": "20260801"},
+    ),
+)
+def test_malformed_contract_dates_are_rejected(payload: dict[str, Any]) -> None:
+    """Malformed contract date values never become entity states."""
+    with pytest.raises(HyundaiKiaVehicleError):
+        HyundaiKiaApiClient._parse_endpoint(
+            EndpointKey.CONNECTED_SERVICE_CONTRACT, payload
+        )
 
 
 def test_standard_authorization_url() -> None:

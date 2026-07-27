@@ -2,6 +2,9 @@
 
 from types import SimpleNamespace
 
+from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.const import UnitOfTime
+
 from custom_components.hyundai_kia_developers.binary_sensor import (
     BINARY_SENSOR_DESCRIPTIONS,
     HyundaiKiaBinarySensor,
@@ -16,7 +19,10 @@ from custom_components.hyundai_kia_developers.const import (
     VehicleType,
 )
 from custom_components.hyundai_kia_developers.models import EntityResult, EntityValue
-from custom_components.hyundai_kia_developers.sensor import SENSOR_DESCRIPTIONS
+from custom_components.hyundai_kia_developers.sensor import (
+    SENSOR_DESCRIPTIONS,
+    HyundaiKiaSensor,
+)
 
 
 def test_existing_entity_keys_remain_stable() -> None:
@@ -63,6 +69,11 @@ def test_new_entity_defaults() -> None:
     assert sensors[EntityKey.EV_BATTERY_LEVEL].entity_registry_enabled_default
     assert binary[EntityKey.CHARGING].entity_registry_enabled_default
     assert binary[EntityKey.VEHICLE_WARNING].entity_registry_enabled_default
+    contract = sensors[EntityKey.CONNECTED_SERVICE_FREE_DAYS_REMAINING]
+    assert contract.entity_registry_enabled_default
+    assert contract.device_class is SensorDeviceClass.DURATION
+    assert contract.native_unit_of_measurement is UnitOfTime.DAYS
+    assert contract.state_class is None
     assert not sensors[EntityKey.CHARGER_TYPE].entity_registry_enabled_default
     assert not binary[EntityKey.LOW_FUEL_WARNING].entity_registry_enabled_default
     assert EntityKey.VEHICLE_WARNING in DEFAULT_ENTITY_KEYS
@@ -104,3 +115,26 @@ def test_vehicle_warning_attributes_are_stable() -> None:
         "active_warnings": ["low_fuel_warning"],
         "unavailable_warnings": ["engine_oil_warning"],
     }
+
+
+def test_contract_sensor_attributes_are_stable() -> None:
+    """Contract sensor attributes retain their automation-facing names."""
+    attributes = {
+        "subscription_date": "2024-01-15",
+        "free_service_end_date": "2026-08-01",
+        "expired": False,
+    }
+    key = EntityKey.CONNECTED_SERVICE_FREE_DAYS_REMAINING
+    entity = object.__new__(HyundaiKiaSensor)
+    entity._entity_key = key
+    entity._subentry_id = "vehicle-1"
+    entity.coordinator = SimpleNamespace(
+        data={
+            "vehicle-1": {
+                key: EntityResult(key=key, value=EntityValue(5, attributes=attributes))
+            }
+        }
+    )
+
+    assert entity.native_value == 5
+    assert entity.extra_state_attributes == attributes
