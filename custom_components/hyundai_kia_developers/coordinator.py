@@ -15,7 +15,7 @@ from .api import HyundaiKiaApiClient
 from .const import (
     CONF_CAR_ID,
     CONF_CAR_TYPE,
-    CORE_ENTITY_KEYS,
+    DEFAULT_ENTITY_KEYS,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     ENTITY_ENDPOINT,
@@ -23,6 +23,7 @@ from .const import (
     EV_VEHICLE_TYPES,
     MAX_PARALLEL_REQUESTS,
     SUBENTRY_TYPE_VEHICLE,
+    WARNING_ENTITY_KEYS,
     EndpointKey,
     EntityKey,
 )
@@ -34,6 +35,44 @@ type EntityContext = tuple[str, EntityKey]
 type EndpointJob = tuple[str, EndpointKey]
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def endpoint_jobs(contexts: set[EntityContext]) -> dict[EndpointJob, set[EntityKey]]:
+    """Expand entity contexts into deduplicated endpoint jobs."""
+    jobs: dict[EndpointJob, set[EntityKey]] = {}
+    for subentry_id, key in contexts:
+        requested_keys = (
+            WARNING_ENTITY_KEYS if key is EntityKey.VEHICLE_WARNING else (key,)
+        )
+        for requested_key in requested_keys:
+            jobs.setdefault((subentry_id, ENTITY_ENDPOINT[requested_key]), set()).add(
+                requested_key
+            )
+    return jobs
+
+
+def warning_summary(
+    results: dict[EntityKey, EntityResult],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Return stable active and unavailable warning identifiers."""
+    active: list[str] = []
+    unavailable: list[str] = []
+    for key in WARNING_ENTITY_KEYS:
+        result = results.get(key)
+        if not result or not result.value or result.error:
+            unavailable.append(key.value)
+        elif result.value.value is True:
+            active.append(key.value)
+    return tuple(sorted(active)), tuple(sorted(unavailable))
+
+
+def vehicle_warning_result(results: dict[EntityKey, EntityResult]) -> EntityResult:
+    """Build the best-effort combined warning result."""
+    active, _unavailable = warning_summary(results)
+    return EntityResult(
+        key=EntityKey.VEHICLE_WARNING,
+        value=EntityValue(bool(active)),
+    )
 
 
 class HyundaiKiaDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
@@ -77,9 +116,7 @@ class HyundaiKiaDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
         if not contexts:
             contexts = self._default_contexts(vehicles)
 
-        jobs: dict[EndpointJob, set[EntityKey]] = {}
-        for subentry_id, key in contexts:
-            jobs.setdefault((subentry_id, ENTITY_ENDPOINT[key]), set()).add(key)
+        jobs = endpoint_jobs(contexts)
 
         tasks = [
             self._async_fetch_endpoint(vehicles[subentry_id], endpoint, requested_keys)
@@ -121,6 +158,16 @@ class HyundaiKiaDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
                         error=error.__class__.__name__,
                     )
 
+        warning_subentries = {
+            subentry_id
+            for subentry_id, key in contexts
+            if key is EntityKey.VEHICLE_WARNING
+        }
+        for subentry_id in warning_subentries:
+            data[subentry_id][EntityKey.VEHICLE_WARNING] = vehicle_warning_result(
+                data[subentry_id]
+            )
+
         if errors and not successes:
             raise UpdateFailed(
                 translation_domain=DOMAIN,
@@ -146,7 +193,9 @@ class HyundaiKiaDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
     ) -> set[EntityContext]:
         """Return initial contexts before entities have been added."""
         contexts = {
-            (subentry_id, key) for subentry_id in vehicles for key in CORE_ENTITY_KEYS
+            (subentry_id, key)
+            for subentry_id in vehicles
+            for key in DEFAULT_ENTITY_KEYS
         }
         for subentry_id, subentry in vehicles.items():
             if self.car_type(subentry) in EV_VEHICLE_TYPES:
