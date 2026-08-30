@@ -25,6 +25,7 @@ from .const import (
 from .exceptions import (
     HyundaiKiaAuthenticationError,
     HyundaiKiaConnectionError,
+    HyundaiKiaError,
     HyundaiKiaRateLimitError,
     HyundaiKiaVehicleError,
 )
@@ -204,9 +205,14 @@ class HyundaiKiaApiClient:
         """Fetch and parse one independently polled vehicle endpoint."""
         path = ENDPOINT_PATHS[endpoint].format(car_id=car_id)
         url = f"{BRAND_ENDPOINTS[self.brand].vehicle_base}{path}"
-        status, payload = await self._async_authenticated_json(url)
-        self._raise_for_api_error(status, self._error_code(payload), endpoint.value)
-        return self._parse_endpoint(endpoint, payload)
+        try:
+            status, payload = await self._async_authenticated_json(url)
+            self._raise_for_api_error(status, self._error_code(payload), endpoint.value)
+            return self._parse_endpoint(endpoint, payload, status=status)
+        except HyundaiKiaError as err:
+            if err.operation is None:
+                err.operation = endpoint.value
+            raise
 
     async def async_validate_vehicle(self, car_id: str) -> None:
         """Validate a car ID while allowing temporarily unavailable metrics."""
@@ -392,7 +398,11 @@ class HyundaiKiaApiClient:
 
     @classmethod
     def _parse_endpoint(
-        cls, endpoint: EndpointKey, payload: dict[str, Any]
+        cls,
+        endpoint: EndpointKey,
+        payload: dict[str, Any],
+        *,
+        status: int | None = None,
     ) -> dict[EntityKey, EntityValue]:
         """Parse one documented vehicle endpoint response."""
         try:
@@ -496,7 +506,9 @@ class HyundaiKiaApiClient:
             raise ValueError
         except (KeyError, TypeError, ValueError, IndexError) as err:
             raise HyundaiKiaVehicleError(
-                f"Vehicle API returned invalid {endpoint.value} data"
+                f"Vehicle API returned invalid {endpoint.value} data",
+                operation=endpoint.value,
+                status=status,
             ) from err
 
     @staticmethod
