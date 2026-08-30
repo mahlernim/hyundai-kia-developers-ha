@@ -417,6 +417,20 @@ def test_invalid_warning_payloads_are_rejected(payload: dict[str, Any]) -> None:
         HyundaiKiaApiClient._parse_endpoint(EndpointKey.LOW_FUEL_WARNING, payload)
 
 
+def test_invalid_endpoint_payload_retains_safe_request_context() -> None:
+    """Malformed successful responses identify their endpoint and HTTP status."""
+    with pytest.raises(HyundaiKiaVehicleError) as exc_info:
+        HyundaiKiaApiClient._parse_endpoint(
+            EndpointKey.EV_CHARGING,
+            {},
+            status=200,
+        )
+
+    assert exc_info.value.error_code is None
+    assert exc_info.value.operation == EndpointKey.EV_CHARGING.value
+    assert exc_info.value.status == 200
+
+
 @pytest.mark.parametrize(("unit", "factor"), list(DISTANCE_TO_KM.items()))
 def test_distance_unit_conversion(unit: int, factor: float) -> None:
     """Every documented distance unit converts to kilometres."""

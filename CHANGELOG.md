@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.9
+
+- Added safe provider error codes, endpoint identifiers, and HTTP statuses to
+  downloaded diagnostics for unavailable vehicle metrics.
+- Distinguished provider rejections from successful responses containing
+  invalid metric data without including API response bodies.
+
 ## 0.2.8
 
 - Accepted successful warning responses with documented Boolean states or a

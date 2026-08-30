@@ -156,6 +156,9 @@ class HyundaiKiaDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
                         key=key,
                         value=None,
                         error=error.__class__.__name__,
+                        error_code=error.error_code,
+                        error_operation=error.operation,
+                        error_status=error.status,
                     )
 
         warning_subentries = {
@@ -211,7 +214,7 @@ class HyundaiKiaDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
         str,
         dict[EntityKey, EntityValue],
         set[EntityKey],
-        Exception | None,
+        HyundaiKiaError | None,
     ]:
         """Fetch one endpoint and retain partial-failure context."""
         try:

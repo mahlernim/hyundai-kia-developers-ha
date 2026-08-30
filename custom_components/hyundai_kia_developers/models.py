@@ -58,6 +58,9 @@ class EntityResult:
     key: EntityKey
     value: EntityValue | None
     error: str | None = None
+    error_code: str | None = None
+    error_operation: str | None = None
+    error_status: int | None = None
 
 
 @dataclass(slots=True)
