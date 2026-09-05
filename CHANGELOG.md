@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.2.10
+
+### 한국어
+
+- 제조사 인증 화면, 토큰 발급, 차량 목록과 데이터 확인 단계에 맞는 오류 안내와
+  복구 화면을 추가했습니다. 설정 전에도 안전한 진단 요약을 복사할 수 있습니다.
+- 요청 제한과 응답 지연을 처리하고, 재시도 시 대기 시간과 현재 인증을 유지합니다.
+  인증 코드 교환에 실패하면 새 인증 절차를 시작합니다.
+- 빈 차량 목록과 오류 `4045`를 구별하고, 재인증 중 확인되지 않은 목록을 다른
+  계정으로 단정하지 않도록 수정했습니다. 일부 기존 차량이 빠지면 저장 전에 안내합니다.
+- 재시도 시 입력한 차량 이름을 유지하고, 수동 Car ID 등록에는 차량 데이터 확인을
+  요구합니다. 정상 설정의 단계와 API 요청 수는 유지됩니다.
+- 한국어·영문 설치 및 문제 해결 안내, 기여·보안 정책과 이슈 양식을 정리했습니다.
+
+### English
+
+- Added recovery guidance for provider authorization, token exchange, vehicle
+  discovery, and validation, with safe diagnostics available before setup completes.
+- Handled rate limits and response-body timeouts. Retries respect the wait interval
+  and reuse current authorization. Failed code exchange requires a fresh sign-in.
+- Distinguished empty lists from error `4045` and stopped treating inconclusive
+  reauthentication results as a different account. Partial vehicle access now
+  requires a choice before saving.
+- Preserved entered vehicle names on retry and required vehicle data to confirm
+  manually entered Car IDs. Successful setup keeps its steps and API request count.
+- Updated Korean and English setup, troubleshooting, contribution and security
+  guidance, and issue forms.
+
 ## 0.2.9
 
 - Added safe provider error codes, endpoint identifiers, and HTTP statuses to

@@ -6,8 +6,9 @@
 
 An unofficial Home Assistant integration for viewing vehicle data from the
 Korean Hyundai, Kia, and Genesis developer APIs. It supports multiple accounts
-and vehicles, discovers owned vehicles automatically, and renews authorization
-when needed.
+and vehicles, discovers authorized vehicles automatically, and renews authorization
+when needed. It reads vehicle data and does not provide remote controls such as
+door locks or climate control.
 
 > This integration supports the Korean developer service only. Accounts,
 > projects, and vehicles from other regions are not compatible.
@@ -20,8 +21,9 @@ when needed.
 - A vehicle registered to your own Bluelink, Kia Connect, or Genesis Connected
   Services account
 
-Each brand requires a separate developer membership and project. Shared
-vehicles may not be available through the developer API.
+Each brand requires a separate developer membership and project. Use the connected
+service contract holder account. Vehicles shared with others and vehicles received
+through sharing may be restricted by the developer API.
 
 ## Install with HACS
 
@@ -55,8 +57,9 @@ of the other fields.
 3. Enter the Client ID and Client Secret from that brand's project.
 4. Open the authorization link, sign in to the connected-car account, and
    approve access.
-5. When the browser reaches `example.com`, copy the complete address-bar URL
-   and paste it into Home Assistant. A blank or error page is expected.
+5. At the registered redirect address, copy the complete URL containing `code`
+   and `state` and paste it into Home Assistant. An `example.com` page error can
+   be ignored only after reaching that final address with both values.
 6. Select the discovered vehicle and confirm its name.
 
 The redirected URL contains a single-use authorization code. Do not include it
@@ -103,28 +106,28 @@ refresh.
 ## Accounts and vehicles
 
 Account names are generated automatically, for example `Kia`, `Hyundai`, and
-`Genesis`. Use **Add vehicle** on an existing account to add another owned
+`Genesis`. Use **Add vehicle** on an existing account to add another authorized
 vehicle. Add a separate account for each brand.
 
 ## Troubleshooting
 
-- **No vehicles found** Confirm the brand account, connected-service contract,
-  and **My vehicle registration** status in the developer project.
-- **The redirect page shows an error** This is expected. Paste the complete URL
-  from the browser address bar into Home Assistant.
-- **Client ID is not registered** Copy the credentials from the selected
-  brand's project and confirm that all three URLs were saved with their separate
-  **Save** buttons.
-- **Authorization expired** Follow the reauthentication prompt. Use
-  **Reconfigure** only when the Client ID, Client Secret, or Redirect URL has
-  changed.
-- **Error `4002`** During authorization or token renewal it requires
-  reauthorization. During a vehicle update it means the request was invalid and
-  does not by itself mean that account authorization expired.
-- **A value has not changed** Wait for the next polling interval or reload the
-  integration entry.
-- **An entity is missing** Some entities depend on the vehicle type and data
-  made available by the manufacturer.
+The [troubleshooting guide](docs/troubleshooting.en.md) distinguishes these cases.
+
+- **No registered vehicles** on the provider login page
+- An empty vehicle list or provider error after returning to Home Assistant
+- Request limits, failed reauthentication, or missing access to some vehicles
+- Unchanged data or missing entities after setup
+
+Select the help option on the authorization form if you cannot proceed on the
+provider page. After an error, the recovery screen offers retry or fresh sign-in
+as appropriate. Failed reauthentication validation does not change or delete
+existing account and vehicle configuration.
+
+## Updates and support
+
+Install the latest release through HACS and restart Home Assistant. See the
+[changelog](CHANGELOG.md) and [contribution and bug-report guide](CONTRIBUTING.md).
+Report security concerns privately as described in the [security policy](SECURITY.md).
 
 ## Disclaimer and license
 

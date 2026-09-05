@@ -8,7 +8,6 @@ from homeassistant.const import CONF_CLIENT_ID, CONF_CLIENT_SECRET
 
 from custom_components.hyundai_kia_developers.config_flow import (
     HyundaiKiaConfigFlow,
-    VehicleSubentryFlowHandler,
     _credentials_schema,
     _next_account_title,
     _prepare_credentials,
@@ -253,7 +252,7 @@ def test_vehicle_label_and_suggested_name() -> None:
     profile = VehicleProfile("sensitive-car-1234", "My Niro", "HEV", "DE", "Niro")
     assert profile.suggested_name == "My Niro"
     label = _vehicle_label(profile)
-    assert label == "My Niro — Niro (••••1234)"
+    assert label == "My Niro, Niro (••••1234)"
     assert "sensitive-car" not in label
 
 
@@ -337,15 +336,6 @@ def test_authorize_form_supplies_registered_redirect_placeholder() -> None:
     }
 
 
-def test_recovery_menu_steps_have_handlers() -> None:
-    """Home Assistant can route both discovery recovery menus."""
-    for handler in (HyundaiKiaConfigFlow, VehicleSubentryFlowHandler):
-        assert hasattr(handler, "async_step_vehicle_discovery_failed")
-        assert hasattr(handler, "async_step_no_vehicles")
-        assert hasattr(handler, "async_step_retry")
-        assert hasattr(handler, "async_step_manual")
-
-
 async def test_authorize_reports_redirect_validation_reason() -> None:
     """The flow preserves a safe, actionable redirect-validation reason."""
     flow = HyundaiKiaConfigFlow()
@@ -376,12 +366,15 @@ async def test_authorize_reports_token_exchange_failure() -> None:
         side_effect=HyundaiKiaAuthenticationError
     )
     flow._show_authorize_form = MagicMock(side_effect=lambda errors: errors)
+    flow._recover = AsyncMock(return_value={"step_id": "recovery"})
 
     result = await flow.async_step_authorize(
         {CONF_REDIRECT_URL: ("https://example.com/redirect?code=secret&state=expected")}
     )
 
-    assert result == {"base": "oauth_token_exchange_failed"}
+    assert result == {"step_id": "recovery"}
+    assert flow._recover.call_args.kwargs["reason"] == "oauth_token_exchange_failed"
+    assert flow._recover.call_args.kwargs["retry_step"] is None
 
 
 async def test_authorize_reports_missing_refresh_token() -> None:
@@ -394,9 +387,11 @@ async def test_authorize_reports_missing_refresh_token() -> None:
         return_value=SimpleNamespace(refresh_token=None)
     )
     flow._show_authorize_form = MagicMock(side_effect=lambda errors: errors)
+    flow._recover = AsyncMock(return_value={"step_id": "recovery"})
 
     result = await flow.async_step_authorize(
         {CONF_REDIRECT_URL: ("https://example.com/redirect?code=secret&state=expected")}
     )
 
-    assert result == {"base": "oauth_missing_refresh_token"}
+    assert result == {"step_id": "recovery"}
+    assert flow._recover.call_args.kwargs["reason"] == "oauth_missing_refresh_token"

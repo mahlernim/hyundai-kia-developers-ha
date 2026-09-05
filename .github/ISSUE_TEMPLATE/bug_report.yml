@@ -1,53 +1,67 @@
-name: Bug report
-description: Report a reproducible integration problem
+name: 오류 신고 · Bug report
+description: 설정 또는 차량 조회 문제를 알려 주세요. Report a setup or vehicle-data problem.
 title: "[Bug]: "
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        Thank you for reporting a problem. **Do not include Client IDs, Client Secrets, tokens, complete redirect URLs/codes, car IDs, or unredacted logs/diagnostics.** Revoke a credential immediately if it was exposed.
+        한국어 또는 영어로 작성해 주세요. Client ID, Client Secret, 토큰, 인증 코드, 전체 리디렉션 URL, Car ID, VIN과 개인정보는 포함하지 마세요.
+        Korean and English reports are welcome. Do not include credentials, tokens, authorization codes, full redirected URLs, Car IDs, VINs, or personal information.
   - type: checkboxes
     id: checks
     attributes:
-      label: Safety and prerequisites
+      label: 확인 사항 · Before submitting
       options:
-        - label: I searched existing issues and tested the latest release.
+        - label: 기존 이슈와 최신 릴리스를 확인했습니다. I checked existing issues and the latest release.
           required: true
-        - label: I removed credentials, redirect codes/URLs, tokens, and car IDs from everything attached.
+        - label: 본문과 첨부에서 인증 정보 및 개인정보를 제거했습니다. I removed credentials and personal information from the report and attachments.
           required: true
   - type: input
     id: version
     attributes:
-      label: Integration version
-      placeholder: 0.2.2
+      label: 통합 구성요소 버전 · Integration version
+      placeholder: 0.2.10
     validations:
       required: true
   - type: input
     id: ha_version
     attributes:
-      label: Home Assistant version
+      label: Home Assistant 버전 · Home Assistant version
       placeholder: 2026.7.0
     validations:
       required: true
   - type: dropdown
     id: brand
     attributes:
-      label: Brand
-      options: [Hyundai, Kia, Both]
+      label: 브랜드 · Brand
+      options: [Hyundai, Kia, Genesis, 여러 브랜드 / Multiple brands]
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: 문제가 발생한 단계 · Failed stage
+      options:
+        - 제조사 로그인 또는 차량 동의 / Provider login or vehicle consent
+        - 리디렉션 URL 입력 또는 토큰 발급 / Redirect URL or token exchange
+        - 차량 목록 또는 차량 등록 / Vehicle discovery or validation
+        - 재인증 또는 재구성 / Reauthentication or reconfiguration
+        - 설정 후 데이터 조회 / Data updates after setup
+        - 기타 또는 확인 불가 / Other or unknown
     validations:
       required: true
   - type: textarea
     id: problem
     attributes:
-      label: What happened?
-      description: Describe expected and actual behavior without account-identifying data.
+      label: 발생한 문제 · What happened?
+      description: 기대한 동작과 실제 결과를 적어 주세요. Describe the expected and actual behavior.
     validations:
       required: true
   - type: textarea
     id: reproduce
     attributes:
-      label: Steps to reproduce
+      label: 재현 방법 · Steps to reproduce
       placeholder: |
         1. ...
         2. ...
@@ -56,10 +70,10 @@ body:
   - type: textarea
     id: diagnostics
     attributes:
-      label: Redacted diagnostics or logs (optional)
-      description: If available, attach redacted Home Assistant diagnostics or a short redacted log excerpt. Never paste credentials, redirect codes, tokens, or car IDs.
+      label: 설정 진단 요약 또는 진단 정보 · Setup summary or diagnostics
+      description: 설정 복구 화면의 진단 요약을 복사하거나, 내용을 확인한 진단 정보를 첨부해 주세요. Copy the recovery screen summary or attach inspected diagnostics. This is optional.
       render: text
   - type: textarea
     id: context
     attributes:
-      label: Additional context
+      label: 추가 정보 · Additional context

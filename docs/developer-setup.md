@@ -9,14 +9,14 @@
 
 - 차량의 Bluelink, Kia Connect 또는 Genesis Connected Services 계약자 계정을
   준비합니다.
-- 공유받은 차량은 개발자 콘솔이나 차량 목록에 표시되지 않을 수 있습니다.
+- 공유한 차량과 공유받은 차량 모두 개발자 콘솔이나 차량 목록에서 제한될 수 있습니다.
 - Client ID, Client Secret 및 인증 코드가 포함된 URL은 공개하지 않습니다.
 
 ## 1. 개발자 콘솔에 가입하고 로그인
 
 | 브랜드 | 공식 안내 | 프로젝트 목록 |
 | --- | --- | --- |
-| 현대 | [콘솔 안내](https://developers.kia.com/web/v1/hyundai/guide_console) | [현대 프로젝트 목록](https://console.developers.hyundai.com/web/v1/project/project_list) |
+| 현대 | [콘솔 안내](https://developers.hyundai.com/web/v1/hyundai/guide_console) | [현대 프로젝트 목록](https://console.developers.hyundai.com/web/v1/project/project_list) |
 | 기아 | [콘솔 안내](https://developers.kia.com/web/v1/kia/guide_console) | [기아 프로젝트 목록](https://console.developers.kia.com/web/v1/project/project_list) |
 | 제네시스 | [콘솔 안내](https://developers.genesis.com/web/v1/genesis/guide_console) | [제네시스 프로젝트 목록](https://console.developers.genesis.com/web/v1/project/project_list) |
 
@@ -35,12 +35,15 @@ Client ID와 Client Secret을 함께 사용할 수 없습니다.
 ## 3. 내 차량 등록
 
 1. 프로젝트 상세 화면에서 **내차량등록**을 누릅니다.
-2. 커넥티드 서비스 계정에 연결된 본인 소유 차량을 선택합니다.
-3. 등록을 완료한 뒤 프로젝트에 차량이 표시되는지 확인합니다.
+2. 커넥티드 서비스 계약자 계정에 연결된 차량을 선택합니다.
+3. 차량 등록과 필요한 약관 동의를 완료합니다.
+4. 같은 프로젝트에서 차량이 **활성화** 상태인지 확인합니다. 목록에 보이는 것만으로
+   활성화가 완료되었다고 판단하지 마세요.
 
 차량이 보이지 않으면 로그인한 개발자 계정이 커넥티드 서비스 계약자 계정과
-일치하는지 확인하세요. 차량이 없는 계정은 프로젝트와 인증 설정까지 진행할 수
-있지만 Home Assistant에서 차량을 검색할 수 없습니다.
+일치하는지 확인하세요. 제조사 인증 화면에서 차량이 없다고 표시되면 인증 코드를
+받기 전에 진행이 막힐 수 있습니다. [단계별 문제 해결 안내](troubleshooting.md)를
+확인하세요.
 
 ## 4. URL 세 개를 각각 저장
 
@@ -72,7 +75,8 @@ Client ID와 Client Secret을 함께 사용할 수 없습니다.
 3. 비밀번호 관리자와 같은 안전한 위치에 보관합니다.
 
 Client Secret을 GitHub 이슈, 로그 또는 스크린샷에 포함하지 마세요. 자격 증명이
-노출되었다면 해당 프로젝트를 삭제하거나 자격 증명을 재발급하세요.
+노출되었다면 제조사의 자격 증명 폐기·재발급 기능이나 비공개 지원 채널을 이용한 뒤
+Home Assistant에서 **재구성**으로 새 값을 입력하세요.
 
 ## 6. Home Assistant에서 인증
 
@@ -80,13 +84,14 @@ Client Secret을 GitHub 이슈, 로그 또는 스크린샷에 포함하지 마�
 2. **Hyundai Kia Genesis Developers**를 선택합니다.
 3. 프로젝트와 같은 브랜드를 선택하고 Client ID와 Client Secret을 입력합니다.
 4. 표시된 인증 링크를 열고 커넥티드 서비스 계정으로 로그인합니다.
-5. 데이터 제공에 동의합니다.
-6. 브라우저가 `example.com`으로 이동하면 주소 표시줄의 전체 URL을 복사합니다.
+5. 차량을 선택하고 접근에 동의합니다.
+6. 등록한 리디렉션 주소로 이동하면 `code`와 `state`가 있는 전체 URL을 복사합니다.
 7. 복사한 URL을 Home Assistant 입력란에 붙여 넣습니다.
 
-`example.com`에서 빈 화면이나 오류가 표시되는 것은 정상입니다. 페이지 내용이 아니라
-주소 표시줄의 전체 URL이 필요합니다. 이 URL에는 일회용 인증 코드가 있으므로 다른
-사람에게 공유하지 마세요.
+`example.com`의 오류는 등록한 최종 주소에 `code`와 `state`가 모두 있는 경우에만
+무시할 수 있습니다. 제조사 로그인 화면의 오류는 별도로 해결해야 합니다. URL의
+일회용 인증 코드를 공유하지 마세요. Data API 동의 오류가 발생하면
+[문제 해결 안내](troubleshooting.md#home-assistant에서-오류가-발생할-때)를 확인하세요.
 
-설정이 끝났습니다. [Home Assistant 사용 안내](../README.md#home-assistant에-계정과-차량-추가)로
+인증을 마친 뒤 Home Assistant에서 차량을 선택하고 이름을 확인합니다. [Home Assistant 사용 안내](../README.md#home-assistant에-계정과-차량-추가)로
 돌아가세요.

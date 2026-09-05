@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import time
 from collections.abc import Callable
 from datetime import date, datetime
+from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urlencode, urlsplit
 
@@ -32,6 +34,21 @@ from .exceptions import (
 from .models import EntityValue, TokenResponse, VehicleProfile
 
 RefreshTokenCallback = Callable[[str], None]
+
+
+def _retry_after_seconds(value: str | None) -> int:
+    """Honor a valid Retry-After header, with a conservative fallback."""
+    if value is not None:
+        try:
+            if value.strip().isascii() and value.strip().isdigit():
+                return max(1, int(value))
+            return max(
+                1, math.ceil(parsedate_to_datetime(value).timestamp() - time.time())
+            )
+        except (TypeError, ValueError, OverflowError):
+            pass
+    return 60
+
 
 ENDPOINT_PATHS: dict[EndpointKey, str] = {
     EndpointKey.DISTANCE_TO_EMPTY: "/api/v1/car/status/{car_id}/dte",
@@ -173,8 +190,6 @@ class HyundaiKiaApiClient:
         url = f"{BRAND_ENDPOINTS[self.brand].vehicle_base}/api/v1/car/profile/carlist"
         status, payload = await self._async_authenticated_json(url)
         error_code = self._error_code(payload)
-        if error_code == "4045":
-            return []
         self._raise_for_api_error(status, error_code, "Vehicle list")
 
         cars = payload.get("cars")
@@ -184,7 +199,11 @@ class HyundaiKiaApiClient:
         vehicles: list[VehicleProfile] = []
         try:
             for car in cars:
-                if not isinstance(car, dict) or not str(car.get("carId", "")).strip():
+                if (
+                    not isinstance(car, dict)
+                    or not isinstance(car.get("carId"), str)
+                    or not car["carId"].strip()
+                ):
                     raise ValueError
                 vehicles.append(
                     VehicleProfile(
@@ -214,13 +233,18 @@ class HyundaiKiaApiClient:
                 err.operation = endpoint.value
             raise
 
-    async def async_validate_vehicle(self, car_id: str) -> None:
-        """Validate a car ID while allowing temporarily unavailable metrics."""
+    async def async_validate_vehicle(self, car_id: str) -> bool:
+        """Validate access and report whether any metrics confirmed the car ID."""
         results = await asyncio.gather(
             self.async_get_endpoint(car_id, EndpointKey.DISTANCE_TO_EMPTY),
             self.async_get_endpoint(car_id, EndpointKey.ODOMETER),
             return_exceptions=True,
         )
+        limits = [
+            result for result in results if isinstance(result, HyundaiKiaRateLimitError)
+        ]
+        if limits:
+            raise max(limits, key=lambda error: error.retry_after or 60)
         for result in results:
             if (
                 isinstance(result, HyundaiKiaVehicleError)
@@ -229,6 +253,7 @@ class HyundaiKiaApiClient:
                 continue
             if isinstance(result, BaseException):
                 raise result
+        return any(isinstance(result, dict) and bool(result) for result in results)
 
     def _access_token_is_valid(self) -> bool:
         """Return whether the in-memory access token has adequate lifetime."""
@@ -262,30 +287,33 @@ class HyundaiKiaApiClient:
                     },
                     data=data,
                 )
+                payload = await self._async_json(response)
         except (TimeoutError, ClientError) as err:
             raise HyundaiKiaConnectionError("OAuth token request failed") from err
 
-        payload = await self._async_json(response)
         error_code = self._token_error_code(payload)
+        details = {
+            "error_code": None if error_code == "unknown" else error_code,
+            "operation": "token",
+            "status": response.status,
+        }
         if self.brand is Brand.GENESIS and (
             payload.get("success") is False or error_code not in {"0000", "unknown"}
         ):
             if error_code in GENESIS_TOKEN_AUTH_ERROR_CODES:
                 raise HyundaiKiaAuthenticationError(
-                    f"OAuth token request was rejected ({error_code})"
+                    f"OAuth token request was rejected ({error_code})", **details
                 )
             raise HyundaiKiaConnectionError(
-                f"OAuth token request failed ({error_code})"
+                f"OAuth token request failed ({error_code})", **details
             )
         if response.status >= 400:
             if response.status in (400, 401, 403) or error_code == "4002":
                 raise HyundaiKiaAuthenticationError(
-                    f"OAuth token request was rejected ({error_code})"
+                    f"OAuth token request was rejected ({error_code})", **details
                 )
-            if response.status == 429:
-                raise HyundaiKiaRateLimitError("OAuth token rate limit reached")
             raise HyundaiKiaConnectionError(
-                f"OAuth token endpoint returned HTTP {response.status}"
+                f"OAuth token endpoint returned HTTP {response.status}", **details
             )
 
         try:
@@ -308,31 +336,31 @@ class HyundaiKiaApiClient:
         """Make an authenticated GET, retrying once after token rejection."""
         for attempt in range(2):
             access_token = await self.async_ensure_access_token(force=attempt == 1)
-            response = await self._async_get(
+            status, payload = await self._async_get(
                 url, headers={"Authorization": f"Bearer {access_token}"}
             )
-            payload = await self._async_json(response)
             error_code = self._error_code(payload)
-            if response.status in (401, 403) and (
+            if status in (401, 403) and (
                 error_code in VEHICLE_AUTH_ERROR_CODES or error_code == "unknown"
             ):
                 self._access_token = None
                 self._access_token_expires_at = 0.0
                 if attempt == 0:
                     continue
-                return response.status, payload
-            if response.status == 429:
-                raise HyundaiKiaRateLimitError("Vehicle API rate limit reached")
-            return response.status, payload
+                return status, payload
+            return status, payload
         raise HyundaiKiaAuthenticationError("Unable to authenticate vehicle request")
 
-    async def _async_get(self, url: str, *, headers: dict[str, str]) -> ClientResponse:
+    async def _async_get(
+        self, url: str, *, headers: dict[str, str]
+    ) -> tuple[int, dict[str, Any]]:
         """Make a bounded GET request."""
         try:
             async with asyncio.timeout(REQUEST_TIMEOUT_SECONDS):
-                return await self._session.get(
+                response = await self._session.get(
                     url, headers={"Accept": "application/json", **headers}
                 )
+                return response.status, await self._async_json(response)
         except (TimeoutError, ClientError) as err:
             raise HyundaiKiaConnectionError("Vehicle API request failed") from err
 
@@ -340,9 +368,21 @@ class HyundaiKiaApiClient:
     async def _async_json(response: ClientResponse) -> dict[str, Any]:
         """Decode a JSON response without trusting its content type."""
         try:
+            if response.status == 429:
+                raise HyundaiKiaRateLimitError(
+                    "API rate limit reached",
+                    status=429,
+                    retry_after=_retry_after_seconds(
+                        response.headers.get("Retry-After")
+                    ),
+                )
             payload = await response.json(content_type=None)
         except (ClientError, json.JSONDecodeError, ValueError) as err:
-            raise HyundaiKiaConnectionError("API returned invalid JSON") from err
+            raise HyundaiKiaConnectionError(
+                "API returned invalid JSON", status=response.status
+            ) from err
+        finally:
+            response.release()
         if not isinstance(payload, dict):
             raise HyundaiKiaConnectionError("API returned an unexpected JSON value")
         return payload
