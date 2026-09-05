@@ -11,11 +11,13 @@ class HyundaiKiaError(Exception):
         error_code: str | None = None,
         operation: str | None = None,
         status: int | None = None,
+        retry_after: int | None = None,
     ) -> None:
         """Retain safe provider diagnostics for actionable UI errors."""
         self.error_code = error_code
         self.operation = operation
         self.status = status
+        self.retry_after = retry_after
         super().__init__(message)
 
 

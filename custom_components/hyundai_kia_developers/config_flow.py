@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import math
 import re
 import secrets
+import time
 from collections.abc import Mapping
 from typing import Any
 from urllib.parse import urlparse
@@ -22,6 +24,7 @@ from homeassistant.const import CONF_CLIENT_ID, CONF_CLIENT_SECRET
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
@@ -57,6 +60,7 @@ from .exceptions import (
     HyundaiKiaConnectionError,
     HyundaiKiaError,
     HyundaiKiaOAuthRedirectError,
+    HyundaiKiaRateLimitError,
     HyundaiKiaVehicleError,
 )
 from .models import HyundaiKiaConfigEntry, TokenResponse, VehicleProfile
@@ -198,11 +202,12 @@ def _vehicle_label(profile: VehicleProfile) -> str:
     detail = profile.sales_model or profile.model_code or profile.car_type
     suffix = profile.car_id[-4:]
     if detail and detail != profile.suggested_name:
-        return f"{profile.suggested_name} — {detail} (••••{suffix})"
+        return f"{profile.suggested_name}, {detail} (••••{suffix})"
     return f"{profile.suggested_name} (••••{suffix})"
 
 
 PROVIDER_ERROR_KEYS = {
+    "4045": "vehicle_list_unavailable",
     "4002": "vehicle_invalid_request",
     "4011": "vehicle_invalid_header",
     "4012": "vehicle_invalid_session",
@@ -224,6 +229,8 @@ PROVIDER_ERROR_KEYS = {
 }
 
 PROVIDER_OPERATION_LABELS = {
+    "Vehicle list": "carlist",
+    "token": "OAuth",
     EndpointKey.DISTANCE_TO_EMPTY.value: "DTE",
     EndpointKey.ODOMETER.value: "odometer",
 }
@@ -232,13 +239,120 @@ PROVIDER_OPERATION_LABELS = {
 def _provider_error_details(error: HyundaiKiaError) -> tuple[str, dict[str, str]]:
     """Return a translated error key and safe provider context."""
     error_key = PROVIDER_ERROR_KEYS.get(error.error_code or "", "invalid_vehicle")
-    operation = PROVIDER_OPERATION_LABELS.get(
-        error.operation or "", error.operation or "vehicle data"
-    )
+    operation = PROVIDER_OPERATION_LABELS.get(error.operation or "", "vehicle data")
     return error_key, {"operation": operation}
 
 
-class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
+class SetupRecoveryMixin:
+    """Offer bounded, stage-specific recovery only after setup needs help."""
+
+    async def _recover(
+        self,
+        stage: str,
+        error: HyundaiKiaError | None = None,
+        *,
+        reason: str | None = None,
+        retry_step: str | None = "vehicle",
+        retry_input: dict[str, Any] | None = None,
+        manual: bool = False,
+    ) -> Any:
+        """Retain only safe context and the pending action in flow memory."""
+        details = (
+            _provider_error_details(error)[1]
+            if error is not None
+            else {"operation": "unknown"}
+        )
+        if isinstance(error, HyundaiKiaRateLimitError):
+            reason = "rate_limited"
+        elif isinstance(error, HyundaiKiaConnectionError):
+            reason = reason or "cannot_connect"
+        elif isinstance(error, HyundaiKiaAuthenticationError):
+            reason = reason or PROVIDER_ERROR_KEYS.get(
+                error.error_code or "", "invalid_auth"
+            )
+            retry_step = None
+        elif error is not None:
+            error_key, details = _provider_error_details(error)
+            reason = reason or error_key
+        self._recovery_reason = reason or "discovery_failed"
+        self._recovery_details = details
+        self._recovery_retry = retry_step
+        self._recovery_input = retry_input
+        self._recovery_manual = manual
+        self._retry_at = time.monotonic() + (
+            max(1, error.retry_after or 60)
+            if isinstance(error, HyundaiKiaRateLimitError)
+            else 0
+        )
+        data = (
+            self._pending
+            if isinstance(self, HyundaiKiaConfigFlow)
+            else self._get_entry().data
+        )
+        code = error.error_code if error is not None else None
+        # Preserve four-digit provider codes, including new ones, without prose.
+        safe_code = (
+            code
+            if re.fullmatch(r"[0-9]{4}", code or "")
+            or code in {"invalid_grant", "invalid_client"}
+            else "unknown"
+        )
+        status = error.status if error is not None else None
+        safe_status = (
+            str(status) if type(status) is int and 100 <= status <= 599 else "unknown"
+        )
+        self._recovery_report = (
+            f"brand={Brand(str(data[CONF_BRAND])).value}; stage={stage}; "
+            f"reason={self._recovery_reason}; operation={details['operation']}; "
+            f"provider_code={safe_code}; http_status={safe_status}"
+        )
+        return await self.async_step_recovery()
+
+    async def async_step_recovery(
+        self, user_input: dict[str, Any] | None = None
+    ) -> Any:
+        """Retry with the active token or explicitly start new authorization."""
+        actions = (["retry"] if self._recovery_retry else []) + ["restart"]
+        if self._recovery_manual:
+            actions.append("manual")
+        remaining = max(0, math.ceil(self._retry_at - time.monotonic()))
+        if user_input is not None and not remaining:
+            action = user_input.get("recovery_action")
+            if action == "retry" and self._recovery_retry:
+                return await getattr(self, f"async_step_{self._recovery_retry}")(
+                    self._recovery_input
+                )
+            if action == "restart":
+                if isinstance(self, HyundaiKiaConfigFlow):
+                    return await self._start_authorization()
+                self._get_entry().async_start_reauth_if_available(self.hass)
+                return self.async_abort(reason="reauth_required")
+            if action == "manual" and self._recovery_manual:
+                return await self.async_step_manual()
+        return self.async_show_form(
+            step_id="recovery",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("recovery_action", default=actions[0]): SelectSelector(
+                        SelectSelectorConfig(
+                            options=actions,
+                            translation_key="setup_recovery",
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    )
+                }
+            ),
+            errors={"base": self._recovery_reason},
+            description_placeholders={
+                **self._recovery_details,
+                "diagnostic": self._recovery_report,
+                "seconds": str(remaining),
+                "troubleshooting_url": "https://github.com/mahlernim/hyundai-kia-developers-ha/blob/main/docs/troubleshooting",
+            },
+        )
+
+
+class HyundaiKiaConfigFlow(SetupRecoveryMixin, ConfigFlow, domain=DOMAIN):
     """Handle account configuration."""
 
     VERSION = 1
@@ -307,26 +421,44 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         self._api = self._api or self._build_api(self._pending)
         if user_input is not None:
+            if user_input.get("authorization_help"):
+                return await self._recover(
+                    "provider_authorization",
+                    reason="provider_authorization_help",
+                    retry_step=None,
+                )
             try:
                 code = parse_authorization_redirect(
-                    str(user_input[CONF_REDIRECT_URL]),
+                    str(user_input.get(CONF_REDIRECT_URL, "")),
                     str(self._pending[CONF_REDIRECT_URI]),
                     self._oauth_state,
                 )
             except HyundaiKiaOAuthRedirectError as err:
                 errors["base"] = err.error_key
             else:
+                # Once submitted, a code may be consumed even if the response is lost.
+                self._oauth_state = secrets.token_urlsafe(32)
+                self._token = None
                 try:
                     self._token = await self._api.async_exchange_authorization_code(
                         code
                     )
-                except HyundaiKiaAuthenticationError:
-                    errors["base"] = "oauth_token_exchange_failed"
-                except HyundaiKiaConnectionError:
-                    errors["base"] = "cannot_connect"
+                except HyundaiKiaError as err:
+                    return await self._recover(
+                        "token_exchange",
+                        err,
+                        reason="oauth_token_exchange_failed"
+                        if isinstance(err, HyundaiKiaAuthenticationError)
+                        else None,
+                        retry_step=None,
+                    )
                 else:
                     if not self._token.refresh_token:
-                        errors["base"] = "oauth_missing_refresh_token"
+                        return await self._recover(
+                            "token_exchange",
+                            reason="oauth_missing_refresh_token",
+                            retry_step=None,
+                        )
                     elif self._flow_mode == "user":
                         return await self.async_step_vehicle()
                     else:
@@ -361,48 +493,34 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
                     await self._api.async_validate_vehicle(
                         self._selected_vehicle.car_id
                     )
-                except HyundaiKiaAuthenticationError as err:
-                    errors["base"], details = _provider_error_details(err)
-                    placeholders.update(details)
-                except HyundaiKiaConnectionError:
-                    errors["base"] = "cannot_connect"
                 except HyundaiKiaError as err:
-                    errors["base"], details = _provider_error_details(err)
-                    placeholders.update(details)
+                    return await self._recover(
+                        "vehicle_validation",
+                        err,
+                        retry_step="vehicle_name",
+                        retry_input=user_input,
+                    )
                 else:
                     return await self._create_account_entry(
                         name, self._selected_vehicle
                     )
         return self.async_show_form(
             step_id="vehicle_name",
-            data_schema=_vehicle_name_schema(self._selected_vehicle.suggested_name),
+            data_schema=_vehicle_name_schema(
+                str(user_input[CONF_CAR_NAME])
+                if user_input is not None
+                else self._selected_vehicle.suggested_name
+            ),
             errors=errors,
             description_placeholders=placeholders,
-        )
-
-    async def async_step_retry(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Retry vehicle discovery using the active token."""
-        self._vehicles = {}
-        return await self.async_step_vehicle()
-
-    async def async_step_vehicle_discovery_failed(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Offer recovery after vehicle discovery fails."""
-        return self.async_show_menu(
-            step_id="vehicle_discovery_failed",
-            menu_options=["retry", "manual"],
         )
 
     async def async_step_no_vehicles(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Offer recovery when discovery returns no vehicles."""
-        return self.async_show_menu(
-            step_id="no_vehicles",
-            menu_options=["retry", "manual"],
+        return await self._recover(
+            "vehicle_discovery", reason="no_vehicles_returned", manual=True
         )
 
     async def async_step_manual(
@@ -421,16 +539,22 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "required"
             else:
                 try:
-                    await self._api.async_validate_vehicle(car_id)
-                except HyundaiKiaAuthenticationError as err:
-                    errors["base"], details = _provider_error_details(err)
-                    placeholders.update(details)
-                except HyundaiKiaConnectionError:
-                    errors["base"] = "cannot_connect"
+                    confirmed = await self._api.async_validate_vehicle(car_id)
                 except HyundaiKiaError as err:
-                    errors["base"], details = _provider_error_details(err)
-                    placeholders.update(details)
+                    return await self._recover(
+                        "manual_validation",
+                        err,
+                        retry_step="manual",
+                        retry_input=user_input,
+                    )
                 else:
+                    if not confirmed:
+                        return await self._recover(
+                            "manual_validation",
+                            reason="manual_unconfirmed",
+                            retry_step="manual",
+                            retry_input=user_input,
+                        )
                     profile = VehicleProfile(car_id, "", "", "", "")
                     return await self._create_account_entry(name, profile)
         return self.async_show_form(
@@ -505,6 +629,9 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
     async def _start_authorization(self) -> ConfigFlowResult:
         """Create fresh OAuth state and show the authorization step."""
         self._oauth_state = secrets.token_urlsafe(32)
+        self._token = None
+        self._vehicles = {}
+        self._selected_vehicle = None
         self._api = self._build_api(self._pending)
         return await self.async_step_authorize()
 
@@ -515,9 +642,12 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="authorize",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_REDIRECT_URL): TextSelector(
+                    vol.Optional(CONF_REDIRECT_URL): TextSelector(
                         TextSelectorConfig(type=TextSelectorType.URL)
-                    )
+                    ),
+                    vol.Optional(
+                        "authorization_help", default=False
+                    ): BooleanSelector(),
                 }
             ),
             errors=errors,
@@ -533,11 +663,13 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
         assert self._api
         try:
             discovered = await self._api.async_get_vehicles()
-        except HyundaiKiaAuthenticationError:
-            self._oauth_state = secrets.token_urlsafe(32)
-            return self._show_authorize_form({"base": "invalid_auth"})
-        except (HyundaiKiaConnectionError, HyundaiKiaVehicleError):
-            return await self.async_step_vehicle_discovery_failed()
+        except HyundaiKiaError as err:
+            return await self._recover(
+                "vehicle_discovery",
+                err,
+                manual=isinstance(err, HyundaiKiaVehicleError)
+                and err.error_code == "4045",
+            )
 
         self._vehicles = {
             profile.car_id: profile
@@ -573,11 +705,18 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
         assert self._api and self._token and self._target_entry
         try:
             vehicles = await self._api.async_get_vehicles()
-        except HyundaiKiaAuthenticationError:
-            self._oauth_state = secrets.token_urlsafe(32)
-            return self._show_authorize_form({"base": "invalid_auth"})
-        except (HyundaiKiaConnectionError, HyundaiKiaVehicleError):
-            return await self.async_step_validation_retry()
+        except HyundaiKiaError as err:
+            return await self._recover(
+                "account_validation", err, retry_step="validation_retry", retry_input={}
+            )
+
+        if not vehicles:
+            return await self._recover(
+                "account_validation",
+                reason="no_vehicles_returned",
+                retry_step="validation_retry",
+                retry_input={},
+            )
 
         configured_ids = {
             str(subentry.data[CONF_CAR_ID])
@@ -586,8 +725,38 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
         }
         discovered_ids = {profile.car_id for profile in vehicles}
         if configured_ids and configured_ids.isdisjoint(discovered_ids):
-            return self.async_abort(reason="wrong_account")
+            return await self._recover(
+                "account_validation", reason="account_mismatch", retry_step=None
+            )
+        missing_ids = configured_ids - discovered_ids
+        if missing_ids:
+            self._missing_vehicle_count = len(missing_ids)
+            return await self.async_step_partial_authorization()
+        return self._update_existing_entry()
 
+    async def async_step_partial_authorization(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Ask before committing a token that omits existing vehicles."""
+        if user_input is not None:
+            if user_input.get("keep_partial_authorization"):
+                return self._update_existing_entry()
+            return await self._start_authorization()
+        return self.async_show_form(
+            step_id="partial_authorization",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        "keep_partial_authorization", default=False
+                    ): BooleanSelector()
+                }
+            ),
+            description_placeholders={"count": str(self._missing_vehicle_count)},
+        )
+
+    def _update_existing_entry(self) -> ConfigFlowResult:
+        """Commit validated credentials while preserving all vehicle subentries."""
+        assert self._api and self._token and self._target_entry
         refresh_token = self._api.refresh_token or self._token.refresh_token
         assert refresh_token
         return self.async_update_reload_and_abort(
@@ -650,7 +819,7 @@ class HyundaiKiaConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
 
-class VehicleSubentryFlowHandler(ConfigSubentryFlow):
+class VehicleSubentryFlowHandler(SetupRecoveryMixin, ConfigSubentryFlow):
     """Discover, add, and rename vehicles under an account."""
 
     def __init__(self) -> None:
@@ -682,8 +851,13 @@ class VehicleSubentryFlowHandler(ConfigSubentryFlow):
         except HyundaiKiaAuthenticationError:
             entry.async_start_reauth_if_available(self.hass)
             return self.async_abort(reason="reauth_required")
-        except (HyundaiKiaConnectionError, HyundaiKiaVehicleError):
-            return await self.async_step_vehicle_discovery_failed()
+        except HyundaiKiaError as err:
+            return await self._recover(
+                "vehicle_discovery",
+                err,
+                manual=isinstance(err, HyundaiKiaVehicleError)
+                and err.error_code == "4045",
+            )
 
         self._vehicles = {
             profile.car_id: profile
@@ -734,11 +908,13 @@ class VehicleSubentryFlowHandler(ConfigSubentryFlow):
                 except HyundaiKiaAuthenticationError:
                     self._get_entry().async_start_reauth_if_available(self.hass)
                     return self.async_abort(reason="reauth_required")
-                except HyundaiKiaConnectionError:
-                    errors["base"] = "cannot_connect"
                 except HyundaiKiaError as err:
-                    errors["base"], details = _provider_error_details(err)
-                    placeholders.update(details)
+                    return await self._recover(
+                        "vehicle_validation",
+                        err,
+                        retry_step="vehicle_name",
+                        retry_input=user_input,
+                    )
                 else:
                     data = {CONF_CAR_ID: self._selected_vehicle.car_id}
                     if self._selected_vehicle.car_type:
@@ -752,34 +928,21 @@ class VehicleSubentryFlowHandler(ConfigSubentryFlow):
                     )
         return self.async_show_form(
             step_id="vehicle_name",
-            data_schema=_vehicle_name_schema(self._selected_vehicle.suggested_name),
+            data_schema=_vehicle_name_schema(
+                str(user_input[CONF_CAR_NAME])
+                if user_input is not None
+                else self._selected_vehicle.suggested_name
+            ),
             errors=errors,
             description_placeholders=placeholders,
-        )
-
-    async def async_step_retry(
-        self, user_input: dict[str, Any] | None = None
-    ) -> SubentryFlowResult:
-        """Retry vehicle discovery."""
-        self._vehicles = {}
-        return await self.async_step_vehicle()
-
-    async def async_step_vehicle_discovery_failed(
-        self, user_input: dict[str, Any] | None = None
-    ) -> SubentryFlowResult:
-        """Offer recovery after vehicle discovery fails."""
-        return self.async_show_menu(
-            step_id="vehicle_discovery_failed",
-            menu_options=["retry", "manual"],
         )
 
     async def async_step_no_vehicles(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
         """Offer recovery when discovery returns no vehicles."""
-        return self.async_show_menu(
-            step_id="no_vehicles",
-            menu_options=["retry", "manual"],
+        return await self._recover(
+            "vehicle_discovery", reason="no_vehicles_returned", manual=True
         )
 
     async def async_step_manual(
@@ -800,16 +963,25 @@ class VehicleSubentryFlowHandler(ConfigSubentryFlow):
                 errors["base"] = "required"
             else:
                 try:
-                    await self._api.async_validate_vehicle(car_id)
+                    confirmed = await self._api.async_validate_vehicle(car_id)
                 except HyundaiKiaAuthenticationError:
                     entry.async_start_reauth_if_available(self.hass)
                     return self.async_abort(reason="reauth_required")
-                except HyundaiKiaConnectionError:
-                    errors["base"] = "cannot_connect"
                 except HyundaiKiaError as err:
-                    errors["base"], details = _provider_error_details(err)
-                    placeholders.update(details)
+                    return await self._recover(
+                        "manual_validation",
+                        err,
+                        retry_step="manual",
+                        retry_input=user_input,
+                    )
                 else:
+                    if not confirmed:
+                        return await self._recover(
+                            "manual_validation",
+                            reason="manual_unconfirmed",
+                            retry_step="manual",
+                            retry_input=user_input,
+                        )
                     return self.async_create_entry(
                         title=name,
                         data={CONF_CAR_ID: car_id},

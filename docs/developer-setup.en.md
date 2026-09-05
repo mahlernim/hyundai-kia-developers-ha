@@ -10,7 +10,8 @@ separately for every brand you want to connect.
 
 - Prepare the account that holds the vehicle's Bluelink, Kia Connect, or
   Genesis Connected Services contract.
-- A shared vehicle may not appear in the developer console or vehicle list.
+- Vehicles shared with others and vehicles received through sharing may be restricted
+  in the developer console or vehicle list.
 - Do not disclose the Client ID, Client Secret, or a URL containing an
   authorization code.
 
@@ -18,7 +19,7 @@ separately for every brand you want to connect.
 
 | Brand | Official guide | Project list |
 | --- | --- | --- |
-| Hyundai | [Console guide](https://developers.kia.com/web/v1/hyundai/guide_console) | [Hyundai project list](https://console.developers.hyundai.com/web/v1/project/project_list) |
+| Hyundai | [Console guide](https://developers.hyundai.com/web/v1/hyundai/guide_console) | [Hyundai project list](https://console.developers.hyundai.com/web/v1/project/project_list) |
 | Kia | [Console guide](https://developers.kia.com/web/v1/kia/guide_console) | [Kia project list](https://console.developers.kia.com/web/v1/project/project_list) |
 | Genesis | [Console guide](https://developers.genesis.com/web/v1/genesis/guide_console) | [Genesis project list](https://console.developers.genesis.com/web/v1/project/project_list) |
 
@@ -37,12 +38,15 @@ brand. Client credentials cannot be shared across brands.
 ## 3. Register your vehicle
 
 1. Select **My vehicle registration** on the project detail page.
-2. Choose the owned vehicle connected to your connected-services account.
-3. Complete registration and confirm that the vehicle appears in the project.
+2. Choose the vehicle connected to your connected-service contract holder account.
+3. Complete vehicle registration and the required consent.
+4. Confirm that the vehicle is **active** in this same project. Appearing in the list
+   alone does not establish that activation is complete.
 
 If the vehicle is absent, confirm that the developer user is the holder of the
-connected-services contract. An account without a vehicle can finish project
-and authorization setup, but Home Assistant will not discover a vehicle.
+connected-services contract. If the provider authorization page shows no vehicles,
+you may be unable to proceed far enough to receive an authorization code. See the
+[troubleshooting guide](troubleshooting.en.md).
 
 ## 4. Save all three URLs separately
 
@@ -73,8 +77,9 @@ Confirm the following details.
 2. Copy the **Client ID** and **Client Secret**.
 3. Store them in a secure location such as a password manager.
 
-Do not include the Client Secret in GitHub issues, logs, or screenshots. Delete
-the project or regenerate its credentials if they are exposed.
+Do not include the Client Secret in GitHub issues, logs, or screenshots. If exposed,
+use the provider's credential revocation or replacement options, or its private
+support channel. Enter replacement credentials using **Reconfigure** in Home Assistant.
 
 ## 6. Authorize from Home Assistant
 
@@ -83,12 +88,13 @@ the project or regenerate its credentials if they are exposed.
 3. Select the project's brand and enter its Client ID and Client Secret.
 4. Open the displayed authorization link and sign in with the connected-services
    account.
-5. Approve data access.
-6. When the browser reaches `example.com`, copy the complete address-bar URL.
+5. Select a vehicle and approve access.
+6. At the registered redirect address, copy the full URL containing `code` and `state`.
 7. Paste that URL into the Home Assistant field.
 
-A blank or error page at `example.com` is expected. Home Assistant needs the
-complete address-bar URL, not the page contents. The URL contains a single-use
-authorization code, so do not share it.
+An `example.com` page error can be ignored only when the final registered address
+contains both `code` and `state`. Errors on the provider login page must be resolved
+separately. Do not share the single-use code in the URL. If a Data API consent error
+occurs, see the [troubleshooting guide](troubleshooting.en.md#errors-inside-home-assistant).
 
-Setup is complete. Return to the [Home Assistant guide](../README.en.md#add-an-account-and-vehicle-in-home-assistant).
+After authorization, select the vehicle and confirm its name in Home Assistant. Return to the [Home Assistant guide](../README.en.md#add-an-account-and-vehicle-in-home-assistant).

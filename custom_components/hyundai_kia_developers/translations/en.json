@@ -18,9 +18,10 @@
       },
       "authorize": {
         "title": "Authorize {brand}",
-        "description": "Before continuing, confirm that the developer console's Account API Redirect URL is saved as `{redirect_uri}`. Also confirm that the Data API Redirect URL and Callback URL were saved with their separate Save buttons as described in the setup guide. Then open the [authorization page]({authorization_url}), complete login, and paste the entire redirected URL. An error page at example.com is expected; copy its address-bar URL. Codes are single-use and are not stored.",
+        "description": "Confirm that the Account API Redirect URL is saved as `{redirect_uri}` in the developer console. Open the [authorization page]({authorization_url}), sign in with your {brand} connected-service account, and approve vehicle access. Paste the entire final redirected URL containing `code` and `state`. An example.com page error can be ignored only after you reach that final address with both values.\n\nIf you cannot proceed on the provider page, leave the URL empty and select the help option below.",
         "data": {
-          "redirect_url": "Redirected URL"
+          "redirect_url": "Redirected URL",
+          "authorization_help": "I cannot proceed with provider login or vehicle consent"
         }
       },
       "vehicle": {
@@ -37,25 +38,9 @@
           "car_name": "Vehicle name"
         }
       },
-      "vehicle_discovery_failed": {
-        "title": "Vehicle discovery unavailable",
-        "description": "The account was authorized, but its vehicle list could not be loaded. Retry or enter a car ID manually.",
-        "menu_options": {
-          "retry": "Retry discovery",
-          "manual": "Enter car ID manually"
-        }
-      },
-      "no_vehicles": {
-        "title": "No vehicles returned",
-        "description": "The account returned no authorized vehicles. Retry or use manual entry if you know the car ID.",
-        "menu_options": {
-          "retry": "Retry discovery",
-          "manual": "Enter car ID manually"
-        }
-      },
       "manual": {
         "title": "Enter vehicle manually",
-        "description": "Use this fallback only when automatic vehicle discovery is unavailable.",
+        "description": "Use this only if you know the Car ID returned by the provider API. A Car ID is not a VIN. Manual entry cannot bypass account permissions or consent.",
         "data": {
           "car_name": "Vehicle name",
           "car_id": "Car ID"
@@ -77,6 +62,20 @@
       "validation_retry": {
         "title": "Retry account validation",
         "description": "Authorization succeeded, but the vehicle list could not be checked. Continue to retry without repeating login."
+      },
+      "recovery": {
+        "title": "Resolve a setup problem",
+        "description": "Read the [troubleshooting guide]({troubleshooting_url}.en.md), then choose an action. Retry repeats the failed check. Sign in again starts a new authorization attempt.\n\nYou can copy this diagnostic summary into a support request. It contains no account details, vehicle identifiers, authorization codes, or tokens.\n\n`{diagnostic}`",
+        "data": {
+          "recovery_action": "Next action"
+        }
+      },
+      "partial_authorization": {
+        "title": "Review access to existing vehicles",
+        "description": "{count} existing vehicles are missing from the newly authorized list. Their configuration will be retained, but their data requests may fail. Submit without selecting the option below to sign in again for all vehicles. Select it to continue with the current access.",
+        "data": {
+          "keep_partial_authorization": "Continue with currently accessible vehicles"
+        }
       }
     },
     "error": {
@@ -91,7 +90,7 @@
       "vehicle_invalid_session": "{operation} error 4012 (Invalid Session): the provider session expired. Authorize the account again and retry.",
       "vehicle_service_terms_required": "{operation} error 4014 (No Service Term): the developer project has no required service terms. Check the project terms in the developer console or contact provider support.",
       "vehicle_unauthorized_client": "{operation} error 4016 (Unauthorized Client): verify the brand, Client ID, and Client Secret, then authorize the account again.",
-      "vehicle_unregistered_user": "{operation} error 4043 (Unregistered User): use the account that holds the Bluelink or Kia Connect contract for this vehicle.",
+      "vehicle_unregistered_user": "{operation} error 4043. Sign in with the Bluelink, Kia Connect, or Genesis Connected Services contract holder account for this vehicle.",
       "vehicle_not_registered": "{operation} error 4046 (No Registered Vehicles): activate the vehicle for this project in the developer console, then authorize it again.",
       "vehicle_precondition_required": "{operation} error 4120 (Pre-operation Required): finish vehicle activation and all account/data consent steps, then retry.",
       "vehicle_provider_internal_error": "{operation} error 5001 (Internal Server Error): the provider failed temporarily. Retry later; contact provider support if it persists.",
@@ -110,13 +109,19 @@
       "oauth_redirect_mismatch": "This is not the registered redirect URL. Confirm that the Account API Redirect URL is saved as {redirect_uri}, then paste the complete redirected address after login and vehicle consent.",
       "oauth_state_mismatch": "This URL belongs to a different or expired setup attempt. Keep one setup window open and use its newly generated authorization link.",
       "oauth_token_exchange_failed": "The provider rejected the authorization code. Verify the selected brand, Client ID, Client Secret, and exact redirect URI, then start again with a new code.",
-      "required": "This field is required."
+      "required": "This field is required.",
+      "discovery_failed": "The vehicle list could not be loaded. Try again later.",
+      "vehicle_list_unavailable": "The provider returned error 4045. The vehicle list or data is unavailable, so registration could not be verified. Check vehicle activation and consent for this project, then retry.",
+      "no_vehicles_returned": "Login completed, but the provider API returned an empty vehicle list. This alone does not establish that the account is wrong. Check vehicle activation and access consent for the same project.",
+      "provider_authorization_help": "If you are stuck on the provider login page, open the troubleshooting guide below. “No registered vehicles” on that page occurs before an authorization code is issued. Home Assistant cannot inspect or change the vehicle list on that page.",
+      "rate_limited": "The provider request limit was reached. Try again in {seconds} seconds. No additional requests are sent while waiting.",
+      "account_mismatch": "None of the returned vehicles matches an existing vehicle. Your saved configuration is retained. Sign in again with an account and project that can access an existing vehicle.",
+      "manual_unconfirmed": "No vehicle data confirmed the entered Car ID. A Car ID is different from a VIN. Check the Car ID supplied by the provider API and whether vehicle data is available."
     },
     "abort": {
       "already_configured": "This vehicle is already configured.",
       "all_vehicles_configured": "Every vehicle returned by this account is already configured.",
-      "cannot_connect": "Unable to connect to the vehicle API.",
-      "wrong_account": "The authorized account cannot access any existing vehicle."
+      "cannot_connect": "Unable to connect to the vehicle API."
     }
   },
   "options": {
@@ -151,25 +156,9 @@
             "car_name": "Vehicle name"
           }
         },
-        "vehicle_discovery_failed": {
-          "title": "Vehicle discovery unavailable",
-          "description": "The vehicle list could not be loaded. Retry or enter a car ID manually.",
-          "menu_options": {
-            "retry": "Retry discovery",
-            "manual": "Enter car ID manually"
-          }
-        },
-        "no_vehicles": {
-          "title": "No vehicles returned",
-          "description": "This account returned no vehicles. Retry or use manual entry.",
-          "menu_options": {
-            "retry": "Retry discovery",
-            "manual": "Enter car ID manually"
-          }
-        },
         "manual": {
           "title": "Enter vehicle manually",
-          "description": "Use this fallback only when automatic discovery is unavailable.",
+          "description": "Use this only if you know the Car ID returned by the provider API. A Car ID is not a VIN. Manual entry cannot bypass account permissions or consent.",
           "data": {
             "car_name": "Vehicle name",
             "car_id": "Car ID"
@@ -180,6 +169,13 @@
           "description": "Renaming preserves its device and entity identities. Remove and add the vehicle to replace it.",
           "data": {
             "car_name": "Vehicle name"
+          }
+        },
+        "recovery": {
+          "title": "Resolve a setup problem",
+          "description": "Read the [troubleshooting guide]({troubleshooting_url}.en.md), then choose an action. Retry repeats the failed check. Sign in again starts a new authorization attempt.\n\nYou can copy this diagnostic summary into a support request. It contains no account details, vehicle identifiers, authorization codes, or tokens.\n\n`{diagnostic}`",
+          "data": {
+            "recovery_action": "Next action"
           }
         }
       },
@@ -192,7 +188,7 @@
         "vehicle_invalid_session": "{operation} error 4012 (Invalid Session): reauthenticate this account and retry.",
         "vehicle_service_terms_required": "{operation} error 4014 (No Service Term): check the project terms in the developer console or contact provider support.",
         "vehicle_unauthorized_client": "{operation} error 4016 (Unauthorized Client): verify this account's developer credentials and reauthenticate it.",
-        "vehicle_unregistered_user": "{operation} error 4043 (Unregistered User): use the account that holds the connected-service contract for this vehicle.",
+        "vehicle_unregistered_user": "{operation} error 4043. Sign in with the Bluelink, Kia Connect, or Genesis Connected Services contract holder account for this vehicle.",
         "vehicle_not_registered": "{operation} error 4046 (No Registered Vehicles): activate the vehicle for this project, then reauthenticate the account.",
         "vehicle_precondition_required": "{operation} error 4120 (Pre-operation Required): finish vehicle activation and all account/data consent steps, then retry.",
         "vehicle_provider_internal_error": "{operation} error 5001 (Internal Server Error): retry later; contact provider support if it persists.",
@@ -205,7 +201,14 @@
         "vehicle_service_unavailable": "{operation} error 5032 (Service Unavailable): check connected-service support for this model and contact provider support.",
         "vehicle_gateway_timeout": "{operation} error 5041 (Gateway Timeout): retry after the vehicle uploads new data.",
         "vehicle_provider_undefined_error": "{operation} error 9999 (Undefined Error): retry later and contact provider support if it persists.",
-        "required": "This field is required."
+        "required": "This field is required.",
+        "discovery_failed": "The vehicle list could not be loaded. Try again later.",
+        "vehicle_list_unavailable": "The provider returned error 4045. The vehicle list or data is unavailable, so registration could not be verified. Check vehicle activation and consent for this project, then retry.",
+        "no_vehicles_returned": "Login completed, but the provider API returned an empty vehicle list. This alone does not establish that the account is wrong. Check vehicle activation and access consent for the same project.",
+        "provider_authorization_help": "If you are stuck on the provider login page, open the troubleshooting guide below. “No registered vehicles” on that page occurs before an authorization code is issued. Home Assistant cannot inspect or change the vehicle list on that page.",
+        "rate_limited": "The provider request limit was reached. Try again in {seconds} seconds. No additional requests are sent while waiting.",
+        "account_mismatch": "None of the returned vehicles matches an existing vehicle. Your saved configuration is retained. Sign in again with an account and project that can access an existing vehicle.",
+        "manual_unconfirmed": "No vehicle data confirmed the entered Car ID. A Car ID is different from a VIN. Check the Car ID supplied by the provider API and whether vehicle data is available."
       },
       "abort": {
         "already_configured": "This vehicle is already configured.",
@@ -216,11 +219,21 @@
   },
   "entity": {
     "sensor": {
-      "distance_to_empty": { "name": "Distance to empty" },
-      "odometer": { "name": "Odometer" },
-      "combined_distance_to_empty": { "name": "Combined distance to empty" },
-      "connected_service_free_days_remaining": { "name": "Connected service free days remaining" },
-      "ev_battery_level": { "name": "EV battery level" },
+      "distance_to_empty": {
+        "name": "Distance to empty"
+      },
+      "odometer": {
+        "name": "Odometer"
+      },
+      "combined_distance_to_empty": {
+        "name": "Combined distance to empty"
+      },
+      "connected_service_free_days_remaining": {
+        "name": "Connected service free days remaining"
+      },
+      "ev_battery_level": {
+        "name": "EV battery level"
+      },
       "charger_type": {
         "name": "Charger type",
         "state": {
@@ -230,23 +243,49 @@
           "unknown": "Unknown"
         }
       },
-      "target_state_of_charge": { "name": "Target state of charge" },
-      "remaining_charging_time": { "name": "Remaining charging time" }
+      "target_state_of_charge": {
+        "name": "Target state of charge"
+      },
+      "remaining_charging_time": {
+        "name": "Remaining charging time"
+      }
     },
     "button": {
-      "refresh_vehicle_data": { "name": "Refresh vehicle data" }
+      "refresh_vehicle_data": {
+        "name": "Refresh vehicle data"
+      }
     },
     "binary_sensor": {
-      "charging": { "name": "Charging" },
-      "charging_cable_connected": { "name": "Charging cable connected" },
-      "vehicle_warning": { "name": "Vehicle warning" },
-      "low_fuel_warning": { "name": "Low fuel warning" },
-      "tire_pressure_warning": { "name": "Tire pressure warning" },
-      "lamp_wire_warning": { "name": "Lamp wire warning" },
-      "smart_key_battery_warning": { "name": "Smart key battery warning" },
-      "washer_fluid_warning": { "name": "Washer fluid warning" },
-      "brake_fluid_warning": { "name": "Brake fluid warning" },
-      "engine_oil_warning": { "name": "Engine oil warning" }
+      "charging": {
+        "name": "Charging"
+      },
+      "charging_cable_connected": {
+        "name": "Charging cable connected"
+      },
+      "vehicle_warning": {
+        "name": "Vehicle warning"
+      },
+      "low_fuel_warning": {
+        "name": "Low fuel warning"
+      },
+      "tire_pressure_warning": {
+        "name": "Tire pressure warning"
+      },
+      "lamp_wire_warning": {
+        "name": "Lamp wire warning"
+      },
+      "smart_key_battery_warning": {
+        "name": "Smart key battery warning"
+      },
+      "washer_fluid_warning": {
+        "name": "Washer fluid warning"
+      },
+      "brake_fluid_warning": {
+        "name": "Brake fluid warning"
+      },
+      "engine_oil_warning": {
+        "name": "Engine oil warning"
+      }
     }
   },
   "exceptions": {
@@ -258,6 +297,15 @@
     },
     "update_failed": {
       "message": "Unable to update any enabled vehicle endpoint."
+    }
+  },
+  "selector": {
+    "setup_recovery": {
+      "options": {
+        "retry": "Retry",
+        "restart": "Sign in again",
+        "manual": "Enter Car ID manually"
+      }
     }
   }
 }

@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Security vulnerability
+  - name: 설정 및 문제 해결 · Setup and troubleshooting
+    url: https://github.com/mahlernim/hyundai-kia-developers-ha/blob/main/docs/troubleshooting.md
+    about: 한국어 안내와 영문 안내를 제공합니다. Korean and English guides are available.
+  - name: 보안 문제 비공개 신고 · Private security report
     url: https://github.com/mahlernim/hyundai-kia-developers-ha/security/advisories/new
-    about: Report vulnerabilities privately; never disclose credentials in a public issue.
+    about: 보안 문제는 비공개로 알려 주세요. Report vulnerabilities privately.

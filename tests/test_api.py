@@ -24,6 +24,7 @@ from custom_components.hyundai_kia_developers.const import (
 from custom_components.hyundai_kia_developers.exceptions import (
     HyundaiKiaAuthenticationError,
     HyundaiKiaConnectionError,
+    HyundaiKiaRateLimitError,
     HyundaiKiaVehicleError,
 )
 
@@ -34,6 +35,12 @@ class FakeResponse:
     def __init__(self, status: int, payload: dict[str, Any]) -> None:
         self.status = status
         self._payload = payload
+        self.headers: dict[str, str] = {}
+        self.released = False
+
+    def release(self) -> None:
+        """Release the synthetic response."""
+        self.released = True
 
     async def json(self, *, content_type: str | None = None) -> dict[str, Any]:
         """Return the prepared JSON body."""
@@ -261,8 +268,8 @@ def test_genesis_authorization_url_uses_redirect_origin() -> None:
 
 
 @pytest.mark.asyncio
-async def test_vehicle_discovery_4045_is_empty() -> None:
-    """Provider no-data code 4045 becomes an empty vehicle list."""
+async def test_vehicle_discovery_4045_preserves_provider_error() -> None:
+    """Provider no-data code 4045 stays distinct from a successful empty list."""
     session = FakeSession()
     api = make_api(session)
     session.add(
@@ -272,7 +279,10 @@ async def test_vehicle_discovery_4045_is_empty() -> None:
         payload={"errCode": "4045", "errMsg": "No data"},
     )
 
-    assert await api.async_get_vehicles() == []
+    with pytest.raises(HyundaiKiaVehicleError) as exc_info:
+        await api.async_get_vehicles()
+    assert exc_info.value.error_code == "4045"
+    assert exc_info.value.operation == "Vehicle list"
 
 
 @pytest.mark.asyncio
@@ -615,3 +625,94 @@ async def test_vehicle_validation_preserves_actionable_provider_error() -> None:
 
     assert exc_info.value.error_code == "5005"
     assert exc_info.value.operation == EndpointKey.DISTANCE_TO_EMPTY.value
+
+
+@pytest.mark.parametrize("token_request", [False, True])
+async def test_non_json_rate_limit_is_classified_before_body_parsing(token_request):
+    """HTML 429 responses still carry a retry delay and release the connection."""
+    session = FakeSession()
+    api = make_api(session)
+    response = FakeResponse(429, {})
+    response.headers["Retry-After"] = "120"
+
+    async def invalid_json(**kwargs):
+        raise AssertionError("A rate-limit response must not need a JSON body")
+
+    response.json = invalid_json
+    if token_request:
+        session._responses[("POST", BRAND_ENDPOINTS[Brand.KIA].token_url)].clear()
+        session._responses[("POST", BRAND_ENDPOINTS[Brand.KIA].token_url)].append(
+            response
+        )
+    else:
+        url = f"{BRAND_ENDPOINTS[Brand.KIA].vehicle_base}/api/v1/car/profile/carlist"
+        session._responses[("GET", url)].append(response)
+    with pytest.raises(HyundaiKiaRateLimitError) as exc_info:
+        await api.async_get_vehicles()
+    assert exc_info.value.status == 429
+    assert exc_info.value.retry_after == 120
+    assert response.released
+    assert len(session.requests) == (1 if token_request else 2)
+
+
+@pytest.mark.parametrize("token_request", [False, True])
+async def test_request_timeout_includes_body_read(monkeypatch, token_request):
+    """A stalled body is bounded and released for token and vehicle requests."""
+    monkeypatch.setattr(api_module, "REQUEST_TIMEOUT_SECONDS", 0.01)
+    session = FakeSession()
+    api = make_api(session)
+    response = FakeResponse(200, {})
+
+    async def stalled_json(**kwargs):
+        await asyncio.Event().wait()
+
+    response.json = stalled_json
+    if token_request:
+        session._responses[("POST", BRAND_ENDPOINTS[Brand.KIA].token_url)].clear()
+        session._responses[("POST", BRAND_ENDPOINTS[Brand.KIA].token_url)].append(
+            response
+        )
+    else:
+        url = f"{BRAND_ENDPOINTS[Brand.KIA].vehicle_base}/api/v1/car/profile/carlist"
+        session._responses[("GET", url)].append(response)
+    with pytest.raises(HyundaiKiaConnectionError):
+        await api.async_get_vehicles()
+    assert response.released
+
+
+def test_retry_after_seconds_and_http_dates(monkeypatch):
+    monkeypatch.setattr(api_module.time, "time", lambda: 0)
+    assert api_module._retry_after_seconds("Thu, 01 Jan 1970 00:02:00 GMT") == 120
+    assert api_module._retry_after_seconds("45") == 45
+    assert api_module._retry_after_seconds("0") == 1
+    assert api_module._retry_after_seconds("invalid") == 60
+    assert api_module._retry_after_seconds(None) == 60
+
+
+async def test_both_missing_metrics_do_not_confirm_manual_id():
+    session = FakeSession()
+    api = make_api(session)
+    for endpoint in (EndpointKey.DISTANCE_TO_EMPTY, EndpointKey.ODOMETER):
+        session.add(
+            "GET",
+            f"{BRAND_ENDPOINTS[Brand.KIA].vehicle_base}{ENDPOINT_PATHS[endpoint].format(car_id='car-1')}",
+            status=404,
+            payload={"errCode": "4045"},
+        )
+    assert await api.async_validate_vehicle("car-1") is False
+
+
+async def test_validation_honors_longest_simultaneous_rate_limit():
+    session = FakeSession()
+    api = make_api(session)
+    for endpoint, delay in [
+        (EndpointKey.DISTANCE_TO_EMPTY, "20"),
+        (EndpointKey.ODOMETER, "120"),
+    ]:
+        url = f"{BRAND_ENDPOINTS[Brand.KIA].vehicle_base}{ENDPOINT_PATHS[endpoint].format(car_id='car-1')}"
+        response = FakeResponse(429, {})
+        response.headers["Retry-After"] = delay
+        session._responses[("GET", url)].append(response)
+    with pytest.raises(HyundaiKiaRateLimitError) as exc_info:
+        await api.async_validate_vehicle("car-1")
+    assert exc_info.value.retry_after == 120
