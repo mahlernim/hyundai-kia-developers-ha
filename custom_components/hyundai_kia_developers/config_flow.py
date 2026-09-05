@@ -342,6 +342,7 @@ class SetupRecoveryMixin:
                 **self._recovery_details,
                 "diagnostic": self._recovery_report,
                 "seconds": str(remaining),
+                "troubleshooting_url": "https://github.com/mahlernim/hyundai-kia-developers-ha/blob/main/docs/troubleshooting",
             },
         )
 

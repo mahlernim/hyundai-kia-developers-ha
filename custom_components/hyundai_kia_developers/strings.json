@@ -65,7 +65,7 @@
       },
       "recovery": {
         "title": "Resolve a setup problem",
-        "description": "Read the [troubleshooting guide](https://github.com/mahlernim/hyundai-kia-developers-ha/blob/main/docs/troubleshooting.en.md), then choose an action. Retry repeats the failed check. Sign in again starts a new authorization attempt.\n\nYou can copy this diagnostic summary into a support request. It contains no account details, vehicle identifiers, authorization codes, or tokens.\n\n`{diagnostic}`",
+        "description": "Read the [troubleshooting guide]({troubleshooting_url}.en.md), then choose an action. Retry repeats the failed check. Sign in again starts a new authorization attempt.\n\nYou can copy this diagnostic summary into a support request. It contains no account details, vehicle identifiers, authorization codes, or tokens.\n\n`{diagnostic}`",
         "data": {
           "recovery_action": "Next action"
         }
@@ -173,7 +173,7 @@
         },
         "recovery": {
           "title": "Resolve a setup problem",
-          "description": "Read the [troubleshooting guide](https://github.com/mahlernim/hyundai-kia-developers-ha/blob/main/docs/troubleshooting.en.md), then choose an action. Retry repeats the failed check. Sign in again starts a new authorization attempt.\n\nYou can copy this diagnostic summary into a support request. It contains no account details, vehicle identifiers, authorization codes, or tokens.\n\n`{diagnostic}`",
+          "description": "Read the [troubleshooting guide]({troubleshooting_url}.en.md), then choose an action. Retry repeats the failed check. Sign in again starts a new authorization attempt.\n\nYou can copy this diagnostic summary into a support request. It contains no account details, vehicle identifiers, authorization codes, or tokens.\n\n`{diagnostic}`",
           "data": {
             "recovery_action": "Next action"
           }
