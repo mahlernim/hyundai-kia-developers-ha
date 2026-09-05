@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.11
+
+### 한국어
+
+- 본인 명의 차량을 가족 등 다른 사람에게 공유하면 차주 계정에서도 등록 가능한
+  차량 목록에 표시되지 않는다는 안내를 첫 설정 화면과 인증 화면에 추가했습니다.
+- 차량 없음 도움말과 한국어·영문 설치 문서에서 공유 상태를 먼저 확인하도록
+  안내합니다. 공유 해제의 영향과 새 인증으로 목록을 다시 확인하는 방법을 설명합니다.
+
+### English
+
+- Clarified before setup and authorization that sharing your own vehicle with
+  someone else, including family, excludes it from the registration list even
+  for the owner account.
+- Updated missing-vehicle guidance and Korean and English setup documentation
+  to prioritize checking sharing, explain the effect of stopping it, and guide
+  users through checking the list with fresh authorization.
+
 ## 0.2.10
 
 ### 한국어
