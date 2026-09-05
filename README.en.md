@@ -22,8 +22,16 @@ door locks or climate control.
   Services account
 
 Each brand requires a separate developer membership and project. Use the connected
-service contract holder account. Vehicles shared with others and vehicles received
-through sharing may be restricted by the developer API.
+service contract holder account.
+
+> **A vehicle you share with someone else, including a family member, is excluded
+> from the registration list even when you own it and sign in with the owner account.**
+> Vehicles shared with you are also excluded. Check sharing in the manufacturer app
+> before installing.
+
+If you choose to stop sharing, do so in the manufacturer app and start a fresh
+authorization attempt to check the list again. Stopping sharing also removes the
+other person's shared access in the app. See the [vehicle-sharing guidance](docs/troubleshooting.en.md#no-registered-vehicles-on-the-provider-page).
 
 ## Install with HACS
 

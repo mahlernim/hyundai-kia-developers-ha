@@ -10,8 +10,12 @@ separately for every brand you want to connect.
 
 - Prepare the account that holds the vehicle's Bluelink, Kia Connect, or
   Genesis Connected Services contract.
-- Vehicles shared with others and vehicles received through sharing may be restricted
-  in the developer console or vehicle list.
+- **Sharing your own vehicle with someone else, including family, excludes it from
+  the registration list even for the owner account.** Vehicles shared with you are
+  also excluded.
+- Check vehicle sharing in the manufacturer app first. If you choose to stop sharing,
+  do so and begin fresh authorization to check the list again. This also removes
+  the other person's shared access in the app.
 - Do not disclose the Client ID, Client Secret, or a URL containing an
   authorization code.
 

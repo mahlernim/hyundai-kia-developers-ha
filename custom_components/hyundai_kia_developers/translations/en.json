@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Connect a developer account",
-        "description": "Select a brand and enter the developer application credentials. The account entry will be named automatically.",
+        "description": "Select a brand and enter the developer application credentials. The account entry will be named automatically.\n\n**A vehicle you share with someone else, including a family member, is excluded from the registration list even when you own it and sign in with the owner account.** Vehicles shared with you are also excluded. Check vehicle sharing in the manufacturer app before continuing.",
         "data": {
           "brand": "Brand",
           "client_id": "Client ID",
@@ -18,7 +18,7 @@
       },
       "authorize": {
         "title": "Authorize {brand}",
-        "description": "Confirm that the Account API Redirect URL is saved as `{redirect_uri}` in the developer console. Open the [authorization page]({authorization_url}), sign in with your {brand} connected-service account, and approve vehicle access. Paste the entire final redirected URL containing `code` and `state`. An example.com page error can be ignored only after you reach that final address with both values.\n\nIf you cannot proceed on the provider page, leave the URL empty and select the help option below.",
+        "description": "**A vehicle you share with someone else, including a family member, is excluded from the registration list even when you own it and sign in with the owner account.** Vehicles shared with you are also excluded. Check vehicle sharing in the manufacturer app before continuing.\n\nConfirm that the Account API Redirect URL is saved as `{redirect_uri}` in the developer console. Open the [authorization page]({authorization_url}), sign in with your {brand} connected-service account, and approve vehicle access. Paste the entire final redirected URL containing `code` and `state`. An example.com page error can be ignored only after you reach that final address with both values.\n\nIf you cannot proceed on the provider page, leave the URL empty and select the help option below.",
         "data": {
           "redirect_url": "Redirected URL",
           "authorization_help": "I cannot proceed with provider login or vehicle consent"
@@ -40,7 +40,7 @@
       },
       "manual": {
         "title": "Enter vehicle manually",
-        "description": "Use this only if you know the Car ID returned by the provider API. A Car ID is not a VIN. Manual entry cannot bypass account permissions or consent.",
+        "description": "Use this only if you know the Car ID returned by the provider API. A Car ID is not a VIN. Manual entry cannot bypass vehicle-sharing restrictions, account permissions, or consent.",
         "data": {
           "car_name": "Vehicle name",
           "car_id": "Car ID"
@@ -91,7 +91,7 @@
       "vehicle_service_terms_required": "{operation} error 4014 (No Service Term): the developer project has no required service terms. Check the project terms in the developer console or contact provider support.",
       "vehicle_unauthorized_client": "{operation} error 4016 (Unauthorized Client): verify the brand, Client ID, and Client Secret, then authorize the account again.",
       "vehicle_unregistered_user": "{operation} error 4043. Sign in with the Bluelink, Kia Connect, or Genesis Connected Services contract holder account for this vehicle.",
-      "vehicle_not_registered": "{operation} error 4046 (No Registered Vehicles): activate the vehicle for this project in the developer console, then authorize it again.",
+      "vehicle_not_registered": "{operation} error 4046. The provider could not find a registered vehicle. A vehicle shared with someone else is excluded from the authorization list even when you own it. Check sharing in the manufacturer app and vehicle activation in the developer console, then authorize again.",
       "vehicle_precondition_required": "{operation} error 4120 (Pre-operation Required): finish vehicle activation and all account/data consent steps, then retry.",
       "vehicle_provider_internal_error": "{operation} error 5001 (Internal Server Error): the provider failed temporarily. Retry later; contact provider support if it persists.",
       "vehicle_provider_permission_error": "{operation} error 5004 (Internal Permission Error): check the project's API access in the developer console, then contact provider support if it is approved.",
@@ -112,8 +112,8 @@
       "required": "This field is required.",
       "discovery_failed": "The vehicle list could not be loaded. Try again later.",
       "vehicle_list_unavailable": "The provider returned error 4045. The vehicle list or data is unavailable, so registration could not be verified. Check vehicle activation and consent for this project, then retry.",
-      "no_vehicles_returned": "Login completed, but the provider API returned an empty vehicle list. This alone does not establish that the account is wrong. Check vehicle activation and access consent for the same project.",
-      "provider_authorization_help": "If you are stuck on the provider login page, open the troubleshooting guide below. “No registered vehicles” on that page occurs before an authorization code is issued. Home Assistant cannot inspect or change the vehicle list on that page.",
+      "no_vehicles_returned": "Login completed, but the provider API returned an empty vehicle list. First check whether you share your own vehicle with someone, including family. Vehicles shared with others or with you are excluded from the authorization list. Check sharing, vehicle activation, and access consent for the same project. An empty list alone does not establish that the account is wrong.",
+      "provider_authorization_help": "If the provider shows “No registered vehicles”, first check whether you share your own vehicle with anyone, including family. A shared vehicle is excluded even for its owner, and vehicles shared with you are also excluded. If you choose to stop sharing, do so in the manufacturer app and select “Sign in again” to check the list. This concerns the provider page before code issuance. Home Assistant has not automatically detected your sharing status.",
       "rate_limited": "The provider request limit was reached. Try again in {seconds} seconds. No additional requests are sent while waiting.",
       "account_mismatch": "None of the returned vehicles matches an existing vehicle. Your saved configuration is retained. Sign in again with an account and project that can access an existing vehicle.",
       "manual_unconfirmed": "No vehicle data confirmed the entered Car ID. A Car ID is different from a VIN. Check the Car ID supplied by the provider API and whether vehicle data is available."
@@ -158,7 +158,7 @@
         },
         "manual": {
           "title": "Enter vehicle manually",
-          "description": "Use this only if you know the Car ID returned by the provider API. A Car ID is not a VIN. Manual entry cannot bypass account permissions or consent.",
+          "description": "Use this only if you know the Car ID returned by the provider API. A Car ID is not a VIN. Manual entry cannot bypass vehicle-sharing restrictions, account permissions, or consent.",
           "data": {
             "car_name": "Vehicle name",
             "car_id": "Car ID"
@@ -189,7 +189,7 @@
         "vehicle_service_terms_required": "{operation} error 4014 (No Service Term): check the project terms in the developer console or contact provider support.",
         "vehicle_unauthorized_client": "{operation} error 4016 (Unauthorized Client): verify this account's developer credentials and reauthenticate it.",
         "vehicle_unregistered_user": "{operation} error 4043. Sign in with the Bluelink, Kia Connect, or Genesis Connected Services contract holder account for this vehicle.",
-        "vehicle_not_registered": "{operation} error 4046 (No Registered Vehicles): activate the vehicle for this project, then reauthenticate the account.",
+        "vehicle_not_registered": "{operation} error 4046. The provider could not find a registered vehicle. A vehicle shared with someone else is excluded from the authorization list even when you own it. Check sharing in the manufacturer app and vehicle activation in the developer console, then authorize again.",
         "vehicle_precondition_required": "{operation} error 4120 (Pre-operation Required): finish vehicle activation and all account/data consent steps, then retry.",
         "vehicle_provider_internal_error": "{operation} error 5001 (Internal Server Error): retry later; contact provider support if it persists.",
         "vehicle_provider_permission_error": "{operation} error 5004 (Internal Permission Error): check the project's API access, then contact provider support if it is approved.",
@@ -204,8 +204,8 @@
         "required": "This field is required.",
         "discovery_failed": "The vehicle list could not be loaded. Try again later.",
         "vehicle_list_unavailable": "The provider returned error 4045. The vehicle list or data is unavailable, so registration could not be verified. Check vehicle activation and consent for this project, then retry.",
-        "no_vehicles_returned": "Login completed, but the provider API returned an empty vehicle list. This alone does not establish that the account is wrong. Check vehicle activation and access consent for the same project.",
-        "provider_authorization_help": "If you are stuck on the provider login page, open the troubleshooting guide below. “No registered vehicles” on that page occurs before an authorization code is issued. Home Assistant cannot inspect or change the vehicle list on that page.",
+        "no_vehicles_returned": "Login completed, but the provider API returned an empty vehicle list. First check whether you share your own vehicle with someone, including family. Vehicles shared with others or with you are excluded from the authorization list. Check sharing, vehicle activation, and access consent for the same project. An empty list alone does not establish that the account is wrong.",
+        "provider_authorization_help": "If the provider shows “No registered vehicles”, first check whether you share your own vehicle with anyone, including family. A shared vehicle is excluded even for its owner, and vehicles shared with you are also excluded. If you choose to stop sharing, do so in the manufacturer app and select “Sign in again” to check the list. This concerns the provider page before code issuance. Home Assistant has not automatically detected your sharing status.",
         "rate_limited": "The provider request limit was reached. Try again in {seconds} seconds. No additional requests are sent while waiting.",
         "account_mismatch": "None of the returned vehicles matches an existing vehicle. Your saved configuration is retained. Sign in again with an account and project that can access an existing vehicle.",
         "manual_unconfirmed": "No vehicle data confirmed the entered Car ID. A Car ID is different from a VIN. Check the Car ID supplied by the provider API and whether vehicle data is available."

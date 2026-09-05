@@ -10,16 +10,31 @@ you are still on the provider website or have already returned to Home Assistant
 This occurs before Home Assistant receives an authorization code or vehicle list.
 The integration cannot change the list on that page or add a vehicle to it.
 
-1. Confirm that the selected brand and Client ID belong to the developer project
+**First check whether you share your own vehicle with anyone, including family.**
+A shared vehicle is excluded from the registration list even when you own it and
+hold its connected-service contract. Vehicles shared with you are also excluded.
+This restriction applies at vehicle access consent and is documented in the
+[Hyundai](https://developers.hyundai.com/web/v1/hyundai/guide_api),
+[Kia](https://developers.kia.com/web/v1/kia/guide_api), and
+[Genesis](https://developers.genesis.com/web/v1/genesis/guide_api) API guides.
+
+1. Check **vehicle sharing** in the relevant manufacturer app, such as Bluelink,
+   Kia Connect, or MY GENESIS. Include sharing with family members.
+2. If you choose to stop sharing, do so in that app. This also removes the other
+   person's shared access in the app. Keeping sharing enabled prevents registration
+   of this vehicle.
+3. Confirm that the selected brand and Client ID belong to the developer project
    where the vehicle was registered.
-2. Complete registration and consent under **My vehicle registration** and confirm
+4. Complete registration and consent under **My vehicle registration** and confirm
    that the vehicle is **active**.
-3. Sign in with the vehicle's Bluelink, Kia Connect, or Genesis Connected Services
-   contract holder account. The vehicle owner and service contract holder may differ.
-4. The official guide describes restrictions for both vehicles shared with others
-   and vehicles received through sharing. Skip this check if sharing is disabled.
-5. To rule out a different account's saved browser session, sign out of the provider
-   or open a fresh Home Assistant authorization link in a private window once.
+5. Select **Sign in again** in Home Assistant to open a fresh authorization link
+   and check the list again. Use the connected-service contract holder account.
+   Sign out of the provider or use a private window if a different account's
+   session is still active.
+
+The delay before the list reflects stopped sharing has not been established, nor
+has continued integration access after sharing is enabled again. Do not assume
+that temporarily stopping sharing is sufficient for continued use.
 
 If these checks do not resolve the issue, ask the provider's developer support to
 check the project-to-vehicle link and account status. Explain that the problem
@@ -42,7 +57,7 @@ the provider website.
 | --- | --- |
 | Redirect URL or authorization code error | Check the registered address and the final URL containing `code` and `state`. A URL from a different setup attempt cannot be used. |
 | Authorization code exchange failed | Codes are single-use. Choose **Sign in again** and follow the new authorization link. |
-| Empty vehicle list | Login completed, but the API returned no vehicles. This alone does not prove that the account is wrong. Check activation and access consent for the same project. |
+| Empty vehicle list | Login completed, but the API returned no vehicles. First check whether you share your own vehicle with someone, then check activation and consent for the same project. An empty list alone does not prove that the account is wrong. |
 | Error `4045` | The vehicle list or data is unavailable. This is treated separately from a successful empty list. |
 | Error `4046` | The provider could not find a registered vehicle. Check registration and activation for this project. |
 | Error `5005` | Data API consent is required. Complete consent using the provider's Service Agreement guidance, then retry. |
