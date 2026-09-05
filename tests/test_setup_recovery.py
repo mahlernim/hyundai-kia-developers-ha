@@ -155,6 +155,8 @@ async def test_failed_code_exchange_requires_fresh_authorization(failure):
     assert flow._oauth_state != "expected"
     assert flow._recovery_retry is None
     assert flow._token is None
+    if isinstance(failure, HyundaiKiaConnectionError):
+        assert result["errors"]["base"] == "cannot_connect"
     flow._retry_at = 0
     new_api = MagicMock()
     flow._build_api = MagicMock(return_value=new_api)
@@ -198,6 +200,20 @@ async def test_unknown_provider_fields_cannot_enter_setup_report():
     assert "private" not in placeholders
     assert "secret-token" not in placeholders
     assert "provider_code=unknown" in placeholders
+
+
+async def test_new_numeric_provider_code_and_safe_endpoint_remain_diagnosable():
+    flow = make_flow()
+    flow._selected_vehicle = profile("car-1")
+    flow._api.async_validate_vehicle.side_effect = HyundaiKiaVehicleError(
+        "private response", error_code="4006", operation="distance_to_empty", status=400
+    )
+    result = await flow.async_step_vehicle_name({CONF_CAR_NAME: "Private name"})
+    report = result["description_placeholders"]["diagnostic"]
+    assert "provider_code=4006" in report
+    assert "operation=DTE" in report
+    assert "Private name" not in report
+    assert "private response" not in report
 
 
 def existing_flow():

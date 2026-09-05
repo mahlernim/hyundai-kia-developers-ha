@@ -257,7 +257,11 @@ class SetupRecoveryMixin:
         manual: bool = False,
     ) -> Any:
         """Retain only safe context and the pending action in flow memory."""
-        details = {"operation": "carlist"}
+        details = (
+            _provider_error_details(error)[1]
+            if error is not None
+            else {"operation": "unknown"}
+        )
         if isinstance(error, HyundaiKiaRateLimitError):
             reason = "rate_limited"
         elif isinstance(error, HyundaiKiaConnectionError):
@@ -286,11 +290,11 @@ class SetupRecoveryMixin:
             else self._get_entry().data
         )
         code = error.error_code if error is not None else None
-        # Only known codes can enter the report. Never include provider prose.
+        # Preserve four-digit provider codes, including new ones, without prose.
         safe_code = (
             code
-            if code in PROVIDER_ERROR_KEYS
-            or code in {"1211", "9001", "9002", "invalid_grant", "invalid_client"}
+            if re.fullmatch(r"[0-9]{4}", code or "")
+            or code in {"invalid_grant", "invalid_client"}
             else "unknown"
         )
         status = error.status if error is not None else None
@@ -299,7 +303,8 @@ class SetupRecoveryMixin:
         )
         self._recovery_report = (
             f"brand={Brand(str(data[CONF_BRAND])).value}; stage={stage}; "
-            f"reason={self._recovery_reason}; provider_code={safe_code}; http_status={safe_status}"
+            f"reason={self._recovery_reason}; operation={details['operation']}; "
+            f"provider_code={safe_code}; http_status={safe_status}"
         )
         return await self.async_step_recovery()
 
@@ -442,7 +447,9 @@ class HyundaiKiaConfigFlow(SetupRecoveryMixin, ConfigFlow, domain=DOMAIN):
                     return await self._recover(
                         "token_exchange",
                         err,
-                        reason="oauth_token_exchange_failed",
+                        reason="oauth_token_exchange_failed"
+                        if isinstance(err, HyundaiKiaAuthenticationError)
+                        else None,
                         retry_step=None,
                     )
                 else:
